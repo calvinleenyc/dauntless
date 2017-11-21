@@ -46,10 +46,14 @@ def build_image_input(train=True, novel=True):
   _, serialized_example = reader.read(filename_queue)
 
   image_seq = []
+  state_seq = []
 
   for i in range(TRAIN_LEN):
     image_name = 'move/' + str(i) + '/image/encoded'
-    features = {image_name: tf.FixedLenFeature([1], tf.string)}
+    state_name = 'move/' + str(i) + '/joint/positions'
+    features = {image_name: tf.FixedLenFeature([1], tf.string),
+                state_name: tf.FixedLenFeature([5], tf.float32)
+    }
     features = tf.parse_single_example(serialized_example, features=features)
 
     image_buffer = tf.reshape(features[image_name], shape=[])
@@ -59,12 +63,14 @@ def build_image_input(train=True, novel=True):
     image = tf.reshape(image, [1, ORIGINAL_HEIGHT, ORIGINAL_WIDTH, COLOR_CHAN])
     # image = tf.image.resize_bicubic(image, [IMG_HEIGHT, IMG_WIDTH])
     image_seq.append(image)
+    state_seq.append(features[state_name])
 
   image_seq = tf.concat(image_seq, 0)
+  
 
 
   image_batch = tf.train.batch(
-      [image_seq],
+      [image_seq, state_seq],
       BATCH_SIZE,
       num_threads=1,
       capacity=1)
