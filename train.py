@@ -6,20 +6,23 @@ from torch.autograd import Variable
 from tensorboardX import SummaryWriter
 
 from grab_train_images import build_image_input, BATCH_SIZE, TRAIN_LEN
-
+from model import CDNA
 import tensorflow as tf
 
 class Trainer:
-    def __init__(self, rnn):
+    def __init__(self, rnn, state_predictor):
         self.rnn = rnn
-        data_getter = build_image_input()
+        self.state_predictor = state_predictor
+        print("Preparing to get data from tfrecord.")
+        self.data_getter = build_image_input()
         sess = tf.InteractiveSession()
         tf.train.start_queue_runners(sess)
         sess.run(tf.global_variables_initializer())
         self.sess = sess
 
-    def train():
-        pass
+    def train(self):
+        train_videos, train_states, train_actions = self.sess.run(self.data_getter)
+        return
 
 def train():
     a = build_image_input()
@@ -41,4 +44,12 @@ def train():
     print(train_states[0])
     print(train_actions[0])
 
-train()
+#train()
+
+if __name__ == '__main__':
+    rnn = CDNA()
+    # On page 11: "The next state is predicted linearly from the current state and action."
+    state_predictor = nn.Linear(10, 5)
+    trainer = Trainer(rnn, state_predictor)
+    while True:
+        trainer.train()
