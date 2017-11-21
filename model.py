@@ -7,48 +7,115 @@ from tensorboardX import SummaryWriter
 
 lr_rate = 0.001
 
-class LSTM(nn.Module):
-    def __init__(self, input_size, hidden_size):
-        super(LSTM, self).__init__()
-        self.hidden_size = hidden_size
-        
-        self.i2f = nn.Linear(input_size + hidden_size, hidden_size)
-        self.i2I = nn.Linear(input_size + hidden_size, hidden_size)
-        self.i2O = nn.Linear(input_size + hidden_size, hidden_size)
-        self.i2C = nn.Linear(input_size + hidden_size, hidden_size)
+KERNEL_SIZE = 5
+
+class ConvLSTM(nn.Module):
+    def __init__(self, sq_side, input_ch, hidden_ch):
+        super(ConvLSTM, self).__init__()
+        self.hidden_ch = hidden_ch
+        self.sq_side = sq_side
+
+        self.i2F = nn.Conv2d(input_ch + hidden_ch, hidden_ch, KERNEL_SIZE, padding = 2)
+        self.i2I = nn.Conv2d(input_ch + hidden_ch, hidden_ch, KERNEL_SIZE, padding = 2)
+        self.i2O = nn.Conv2d(input_ch + hidden_ch, hidden_ch, KERNEL_SIZE, padding = 2)
+        self.i2C = nn.Conv2d(input_ch + hidden_ch, hidden_ch, KERNEL_SIZE, padding = 2)
         
     def forward(self, input, hidden, cell):
         combined = torch.cat((input, hidden), 1)
-        forget = F.sigmoid(self.i2f(combined))
+        F = F.sigmoid(self.i2F(combined))
         I = F.sigmoid(self.i2I(combined))
         O = F.sigmoid(self.i2O(combined))
         C = forget * cell + I * F.tanh(self.i2C(combined))
         H = O * F.tanh(C)
         return H, C
 
-    def initHidden(self):
-        return Variable(torch.zeros(1, self.hidden_size))
+    def initHidden(self, batch_size):
+        return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side))
 
-    def initCell(self):
-        return Variable(torch.zeros(1, self.hidden_size))
+    def initCell(self, batch_size):
+        return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side))
 
-class StackedLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size1, hidden_size2, output_size):
-        super(StackedLSTM, self).__init__()
-        self.lstm1 = LSTM(input_size, hidden_size1)
-        self.lstm2 = LSTM(hidden_size1, hidden_size2) # try a skip connection later
-        self.to_out = nn.Linear(hidden_size2, output_size)
+class CDNA(nn.Module):
+    def __init__(self):
+        super(CDNA, self).__init__()
+        self.conv1 = nn.Conv2d(3, 32, KERNEL_SIZE, stride = 2, padding = 2)
+        self.lstm1 = ConvLSTM(32, 32, 32)
+        self.lstm2 = ConvLSTM(32, 32, 64)
+        self.lstm3 = ConvLSTM(16, 64, 64)
+        self.lstm4 = ConvLSTM(16, 64, 128)
+        self.lstm5 = ConvLSTM(8, 138, 64)
+        self.to_kernels = nn.Linear(64 * 8 * 8, 10 * 5 * 5)
+        self.lstm6 = ConvLSTM(16, 64, 32)
+        self.lstm7 = ConvLSTM(32, 64 + 32, 32)
+        self.conv2 = nn.Conv2d(32 + 32, 11, kernel_size = 1)
         
     def forward(self, input, hiddens, cells):
-        hidden1, cell1 = self.lstm1(input, hiddens[0], cells[0])
-        hidden2, cell2 = self.lstm2(hidden1, hiddens[1], cells[1])
-        out = F.log_softmax(self.to_out(hidden2))
-        return out, [hidden1, hidden2], [cell1, cell2]
+        # input is preprocessed with numpy (at least for now)
+        img, tiled = input
+        layer0 = self.conv1(img)
+        hidden1, cell1 = self.lstm1(layer0, hiddens[1], cells[1])
+        hidden2, cell2 = self.lstm2(hidden1, hiddens[2], cells[2])
+        hidden3, cell3 = self.lstm3(F.max_pool2d(hidden2, 2), hiddens[3], cells[3])
+        hidden4, cell4 = self.lstm4(hidden3, hiddens[4], cells[4])
+        
+        input5 = torch.cat((F.max_pool2d(hidden4, 2), tiled), 1)
+        hidden5, cell5 = self.lstm5(input5, hiddens[5], cells[5])
+
+        #### TRICKY - read this again later ####
+        kernels = to_kernels(hidden5.view([-1, 64 * 8 * 8])).view([-1, 10, 25])
+        # NOT a channel softmax, but a spatial one
+        normalized_kernels = F.softmax(kernels, dim = 2).view([-1, 10, 5, 5])
+        # We will wait to transform the images until we compute the loss.
+
+        hidden6, cell6 = self.lstm6(F.upsample(hidden5, scale_factor = 2), hiddens[6], cells[6])
+
+        input7 = torch.cat((F.upsample(hidden6, scale_factor = 2), hidden3), 1)
+        hidden7, cell7 = self.lstm7(input7, hiddens[7], cells[7])
+
+        input_out = torch.cat((F.upsample(hidden7, scale_factor = 2), hidden1), 1)
+        out = F.softmax(self.conv2(input_out), dim = 1) # channel softmax
+
+        print("hidden1")
+        print(hidden1.size())
+        print("hidden2")
+        print(hidden2.size())
+        print("hidden3")
+        print(hidden3.size())
+        print("hidden4")
+        print(hidden4.size())
+        print("hidden5")
+        print(hidden5.size())
+        print("hidden6")
+        print(hidden6.size())
+        print("hidden7")
+        print(hidden7.size())
+        print("out")
+        print(out.size())
+
+        return out, kernels, [None, hidden1, hidden2, hidden3, hidden4, hidden5, hidden6, hidden7],\
+            [None, cell1, cell2, cell3, cell4, cell5, cell6, cell7]
 
     def initHidden(self, batch_size = 1):
-        return [Variable(torch.zeros(batch_size, self.lstm1.hidden_size)),
-                Variable(torch.zeros(batch_size, self.lstm2.hidden_size))]
+        # The first entry is just so that the indexing aligns with the semantics
+        return [None,
+                self.lstm1.initHidden(batch_size),
+                self.lstm2.initHidden(batch_size),
+                self.lstm3.initHidden(batch_size),
+                self.lstm4.initHidden(batch_size),
+                self.lstm5.initHidden(batch_size),
+                self.lstm6.initHidden(batch_size),
+                self.lstm7.initHidden(batch_size),
+        ]
 
     def initCell(self, batch_size = 1):
-        return [Variable(torch.zeros(batch_size, self.lstm1.hidden_size)),
-                Variable(torch.zeros(batch_size, self.lstm2.hidden_size))]
+        return [None,
+                self.lstm1.initCell(batch_size),
+                self.lstm2.initCell(batch_size),
+                self.lstm3.initCell(batch_size),
+                self.lstm4.initCell(batch_size),
+                self.lstm5.initCell(batch_size),
+                self.lstm6.initCell(batch_size),
+                self.lstm7.initCell(batch_size),
+        ]
+
+rnn = CDNA()
