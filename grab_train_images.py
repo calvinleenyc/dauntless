@@ -58,7 +58,7 @@ def build_image_input(train=True, novel=True):
     # image = tf.image.resize_bicubic(image, [IMG_HEIGHT, IMG_WIDTH])
     image_seq.append(image)
 
-  image_seq = tf.concat(0, image_seq)
+  image_seq = tf.concat(image_seq, 0)
 
 
   image_batch = tf.train.batch(
@@ -68,17 +68,18 @@ def build_image_input(train=True, novel=True):
       capacity=1)
   return image_batch
 
-import moviepy.editor as mpy
+#import moviepy.editor as mpy
 def npy_to_gif(npy, filename):
     clip = mpy.ImageSequenceClip(list(npy), fps=10)
     clip.write_gif(filename)
 
-train_image_tensor = build_image_input()
-sess = tf.InteractiveSession()
-tf.train.start_queue_runners(sess)
-sess.run(tf.initialize_all_variables())
-train_videos = sess.run(train_image_tensor)
+if __name__ == '__main__':
+    train_image_tensor = build_image_input()
+    sess = tf.InteractiveSession()
+    tf.train.start_queue_runners(sess)
+    sess.run(tf.initialize_all_variables())
+    train_videos = sess.run(train_image_tensor)
 
-for i in range(BATCH_SIZE):
-    video = train_videos[i]
-    npy_to_gif(video, '~/train_' + str(i) + '.gif')
+    for i in range(BATCH_SIZE):
+        video = train_videos[i]
+        npy_to_gif(video, '~/train_' + str(i) + '.gif')
