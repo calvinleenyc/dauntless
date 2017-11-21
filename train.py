@@ -12,7 +12,7 @@ import tensorflow as tf
 class Trainer:
     def __init__(self, rnn):
         self.rnn = rnn
-        
+        data_getter = build_image_input()
         sess = tf.InteractiveSession()
         tf.train.start_queue_runners(sess)
         sess.run(tf.global_variables_initializer())
@@ -32,7 +32,6 @@ def train():
     print(train_videos[0][2][3][4][0])
     print(train_videos[1][2][3][4][0])
 
-    b = build_image_input()
     train_videos = sess.run(a)
     print(train_videos[0][2][3][4][0])
     print(train_videos[1][2][3][4][0])
