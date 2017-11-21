@@ -19,6 +19,8 @@ ORIGINAL_HEIGHT = 512
 COLOR_CHAN = 3
 BATCH_SIZE = 25
 
+TRAIN_LEN = 8
+
 def build_image_input(train=True, novel=True):
   """Create input tfrecord tensors.
 
@@ -45,7 +47,7 @@ def build_image_input(train=True, novel=True):
 
   image_seq = []
 
-  for i in range(25):
+  for i in range(TRAIN_LEN):
     image_name = 'move/' + str(i) + '/image/encoded'
     features = {image_name: tf.FixedLenFeature([1], tf.string)}
     features = tf.parse_single_example(serialized_example, features=features)
