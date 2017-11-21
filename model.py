@@ -46,8 +46,10 @@ class CDNA(nn.Module):
         self.lstm5 = ConvLSTM(8, 138, 64)
         self.to_kernels = nn.Linear(64 * 8 * 8, 10 * 5 * 5)
         self.lstm6 = ConvLSTM(16, 64, 32)
-        self.lstm7 = ConvLSTM(32, 64 + 32, 32)
-        self.conv2 = nn.Conv2d(32 + 32, 11, kernel_size = 1)
+        # Note that I couldn't tell from the diagram/description in the paper exactly how many
+        # channels LSTM 7 should have.
+        self.lstm7 = ConvLSTM(32, 64 + 32, 64)
+        self.conv2 = nn.Conv2d(64 + 32, 11, kernel_size = 1)
 
         # For some reason, F.softmax(x, dim = 2) doesn't work on my machine,
         # so I use this instead: given a 4D tensor, it softmaxes dimension 1.
@@ -57,20 +59,20 @@ class CDNA(nn.Module):
         # input is preprocessed with numpy (at least for now)
         img, tiled = input
         layer0 = self.conv1(img)
-        print("layer0")
-        print(layer0.size())
+        #print("layer0")
+        #print(layer0.size())
         hidden1, cell1 = self.lstm1(layer0, hiddens[1], cells[1])
         
-        print("hidden1")
-        print(hidden1.size())
+        #print("hidden1")
+        #print(hidden1.size())
         hidden2, cell2 = self.lstm2(hidden1, hiddens[2], cells[2])
         hidden3, cell3 = self.lstm3(F.max_pool2d(hidden2, 2), hiddens[3], cells[3])
         hidden4, cell4 = self.lstm4(hidden3, hiddens[4], cells[4])
 
-        print("hidden2")
-        print(hidden2.size())
-        print("hidden3")
-        print(hidden3.size())
+        #print("hidden2")
+        #print(hidden2.size())
+        #print("hidden3")
+        #print(hidden3.size())
         
         input5 = torch.cat((F.max_pool2d(hidden4, 2), tiled), 1)
         hidden5, cell5 = self.lstm5(input5, hiddens[5], cells[5])
@@ -86,15 +88,15 @@ class CDNA(nn.Module):
 
         hidden6, cell6 = self.lstm6(F.upsample(hidden5, scale_factor = 2), hiddens[6], cells[6])
 
-        print("hidden4")
-        print(hidden4.size())
-        print("hidden5")
-        print(hidden5.size())
-        print("hidden6")
-        print(hidden6.size())
+        #print("hidden4")
+        #print(hidden4.size())
+        #print("hidden5")
+        #print(hidden5.size())
+        #print("hidden6")
+        #print(hidden6.size())
         input7 = F.upsample(torch.cat((hidden6, hidden3), 1), scale_factor = 2)
-        print("input7")
-        print(input7.size())
+        #print("input7")
+        #print(input7.size())
         hidden7, cell7 = self.lstm7(input7, hiddens[7], cells[7])
 
         input_out = F.upsample(torch.cat((hidden7, hidden1), 1), scale_factor = 2)
@@ -102,10 +104,10 @@ class CDNA(nn.Module):
 
         
         
-        print("hidden7")
-        print(hidden7.size())
-        print("out")
-        print(out.size())
+        #print("hidden7")
+        #print(hidden7.size())
+        #print("out")
+        #print(out.size())
 
         return out, normalized_kernels, [None, hidden1, hidden2, hidden3, hidden4, hidden5, hidden6, hidden7],\
             [None, cell1, cell2, cell3, cell4, cell5, cell6, cell7]
