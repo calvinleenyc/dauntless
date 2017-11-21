@@ -52,4 +52,5 @@ if __name__ == '__main__':
     state_predictor = nn.Linear(10, 5)
     trainer = Trainer(rnn, state_predictor)
     while True:
+        print("!")
         trainer.train()

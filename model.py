@@ -145,27 +145,28 @@ class CDNA(nn.Module):
             ans += here
         return ans
 
-rnn = CDNA()
+if __name__ == '__main__':
+    rnn = CDNA()
 
-img = np.zeros([3, 64, 64])
-tiled = np.zeros([10, 8, 8])
+    img = np.zeros([3, 64, 64])
+    tiled = np.zeros([10, 8, 8])
 
-img = Variable(torch.FloatTensor([img, img, img, img]))
-tiled = Variable(torch.FloatTensor([tiled, tiled, tiled, tiled]))
+    img = Variable(torch.FloatTensor([img, img, img, img]))
+    tiled = Variable(torch.FloatTensor([tiled, tiled, tiled, tiled]))
 
-hidden = rnn.initHidden(4)
-cell = rnn.initCell(4)
+    hidden = rnn.initHidden(4)
+    cell = rnn.initCell(4)
 
-q = rnn((img, tiled), hidden, cell)
-print(q[0])
-print(q[1])
+    q = rnn((img, tiled), hidden, cell)
+    print(q[0])
+    print(q[1])
 
-qq = q[1].data.numpy()
-print(np.sum(qq[2,4,:,:]))
+    qq = q[1].data.numpy()
+    print(np.sum(qq[2,4,:,:]))
 
-qqq = q[0].data.numpy()
-print(np.sum(qqq[2,:,2,3]))
+    qqq = q[0].data.numpy()
+    print(np.sum(qqq[2,:,2,3]))
 
 
 
-print(rnn.num_params())
+    print(rnn.num_params()) # Concerning: should be 12.6M...?  Maybe the CDNA is special?
