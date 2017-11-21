@@ -22,10 +22,10 @@ class ConvLSTM(nn.Module):
         
     def forward(self, input, hidden, cell):
         combined = torch.cat((input, hidden), 1)
-        F = F.sigmoid(self.i2F(combined))
+        FG = F.sigmoid(self.i2F(combined))
         I = F.sigmoid(self.i2I(combined))
         O = F.sigmoid(self.i2O(combined))
-        C = forget * cell + I * F.tanh(self.i2C(combined))
+        C = FG * cell + I * F.tanh(self.i2C(combined))
         H = O * F.tanh(C)
         return H, C
 
@@ -48,51 +48,66 @@ class CDNA(nn.Module):
         self.lstm6 = ConvLSTM(16, 64, 32)
         self.lstm7 = ConvLSTM(32, 64 + 32, 32)
         self.conv2 = nn.Conv2d(32 + 32, 11, kernel_size = 1)
+
+        # For some reason, F.softmax(x, dim = 2) doesn't work on my machine,
+        # so I use this instead: given a 4D tensor, it softmaxes dimension 1.
+        self.softmax = nn.Softmax2d()
         
     def forward(self, input, hiddens, cells):
         # input is preprocessed with numpy (at least for now)
         img, tiled = input
         layer0 = self.conv1(img)
+        print("layer0")
+        print(layer0.size())
         hidden1, cell1 = self.lstm1(layer0, hiddens[1], cells[1])
+        
+        print("hidden1")
+        print(hidden1.size())
         hidden2, cell2 = self.lstm2(hidden1, hiddens[2], cells[2])
         hidden3, cell3 = self.lstm3(F.max_pool2d(hidden2, 2), hiddens[3], cells[3])
         hidden4, cell4 = self.lstm4(hidden3, hiddens[4], cells[4])
+
+        print("hidden2")
+        print(hidden2.size())
+        print("hidden3")
+        print(hidden3.size())
         
         input5 = torch.cat((F.max_pool2d(hidden4, 2), tiled), 1)
         hidden5, cell5 = self.lstm5(input5, hiddens[5], cells[5])
 
         #### TRICKY - read this again later ####
-        kernels = to_kernels(hidden5.view([-1, 64 * 8 * 8])).view([-1, 10, 25])
+        kernels = self.to_kernels(hidden5.view([-1, 64 * 8 * 8])).view([-1, 25, 10, 1])
+        # print(kernels)
+        # print(self.softmax(kernels))
         # NOT a channel softmax, but a spatial one
-        normalized_kernels = F.softmax(kernels, dim = 2).view([-1, 10, 5, 5])
+        normalized_kernels = torch.transpose(self.softmax(kernels), 1, 2)
+        normalized_kernels = normalized_kernels.contiguous().view([-1, 10, 5, 5])
         # We will wait to transform the images until we compute the loss.
 
         hidden6, cell6 = self.lstm6(F.upsample(hidden5, scale_factor = 2), hiddens[6], cells[6])
 
-        input7 = torch.cat((F.upsample(hidden6, scale_factor = 2), hidden3), 1)
-        hidden7, cell7 = self.lstm7(input7, hiddens[7], cells[7])
-
-        input_out = torch.cat((F.upsample(hidden7, scale_factor = 2), hidden1), 1)
-        out = F.softmax(self.conv2(input_out), dim = 1) # channel softmax
-
-        print("hidden1")
-        print(hidden1.size())
-        print("hidden2")
-        print(hidden2.size())
-        print("hidden3")
-        print(hidden3.size())
         print("hidden4")
         print(hidden4.size())
         print("hidden5")
         print(hidden5.size())
         print("hidden6")
         print(hidden6.size())
+        input7 = F.upsample(torch.cat((hidden6, hidden3), 1), scale_factor = 2)
+        print("input7")
+        print(input7.size())
+        hidden7, cell7 = self.lstm7(input7, hiddens[7], cells[7])
+
+        input_out = F.upsample(torch.cat((hidden7, hidden1), 1), scale_factor = 2)
+        out = self.softmax(self.conv2(input_out)) # channel softmax
+
+        
+        
         print("hidden7")
         print(hidden7.size())
         print("out")
         print(out.size())
 
-        return out, kernels, [None, hidden1, hidden2, hidden3, hidden4, hidden5, hidden6, hidden7],\
+        return out, normalized_kernels, [None, hidden1, hidden2, hidden3, hidden4, hidden5, hidden6, hidden7],\
             [None, cell1, cell2, cell3, cell4, cell5, cell6, cell7]
 
     def initHidden(self, batch_size = 1):
@@ -118,4 +133,37 @@ class CDNA(nn.Module):
                 self.lstm7.initCell(batch_size),
         ]
 
+    def num_params(self):
+        ans = 0
+        for param in self.parameters():
+            sz = param.size()
+            here = 1
+            for dim in range(len(sz)):
+                here *= sz[dim]
+            ans += here
+        return ans
+
 rnn = CDNA()
+
+img = np.zeros([3, 64, 64])
+tiled = np.zeros([10, 8, 8])
+
+img = Variable(torch.FloatTensor([img, img, img, img]))
+tiled = Variable(torch.FloatTensor([tiled, tiled, tiled, tiled]))
+
+hidden = rnn.initHidden(4)
+cell = rnn.initCell(4)
+
+q = rnn((img, tiled), hidden, cell)
+print(q[0])
+print(q[1])
+
+qq = q[1].data.numpy()
+print(np.sum(qq[2,4,:,:]))
+
+qqq = q[0].data.numpy()
+print(np.sum(qqq[2,:,2,3]))
+
+
+
+print(rnn.num_params())
