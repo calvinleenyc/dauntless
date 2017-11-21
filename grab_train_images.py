@@ -47,12 +47,16 @@ def build_image_input(train=True, novel=True):
 
   image_seq = []
   state_seq = []
-
+  action_seq = []
+  
   for i in range(TRAIN_LEN):
     image_name = 'move/' + str(i) + '/image/encoded'
-    state_name = 'move/' + str(i) + '/joint/positions'
+    state_name = 'move/' + str(i) + '/endeffector/vec_pitch_yaw'
+    action_name = 'move/' + str(i) + '/commanded_pose/vec_pitch_yaw'
+    
     features = {image_name: tf.FixedLenFeature([1], tf.string),
-                state_name: tf.FixedLenFeature([5], tf.float32)
+                state_name: tf.FixedLenFeature([5], tf.float32),
+                action_name: tf.FixedLenFeature([5], tf.float32)
     }
     features = tf.parse_single_example(serialized_example, features=features)
 
@@ -64,13 +68,14 @@ def build_image_input(train=True, novel=True):
     # image = tf.image.resize_bicubic(image, [IMG_HEIGHT, IMG_WIDTH])
     image_seq.append(image)
     state_seq.append(features[state_name])
+    action_seq.append(features[action_name])
 
   image_seq = tf.concat(image_seq, 0)
   
 
 
   image_batch = tf.train.batch(
-      [image_seq, state_seq],
+      [image_seq, state_seq, action_seq],
       BATCH_SIZE,
       num_threads=1,
       capacity=1)
