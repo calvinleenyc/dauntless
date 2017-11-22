@@ -83,6 +83,10 @@ class Trainer:
                 this_batch.append(spatial_tiling)
             tiled.append(this_batch)
         tiled = np.array(tiled) # maybe np.stack
+
+        tiled = torch.FloatTensor(tiled)
+        # Each frame will now be processed separately
+        tiled = torch.unbind(tiled, dim = 1)
         
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
@@ -91,7 +95,7 @@ class Trainer:
         state_prediction_loss = 0
         
         for t in range(TRAIN_LEN - 1):
-            masks, kernels, hidden, cell = self.rnn(videos[t], wrap(tiled[:, t, :, :, :]), hidden, cell)
+            masks, kernels, hidden, cell = self.rnn(videos[t], tiled[t], hidden, cell)
 
             
             for b in range(BATCH_SIZE):
@@ -108,8 +112,6 @@ class Trainer:
                 # Potentially there's a more subtle way here, using broadcasting
                 for c in range(3):
                     prediction = torch.sum(transformed_images[:, c, :, :] * masks[b], dim = 0)
-                    #print(prediction.size())
-                    #print(wrap(videos[b, t, c, :, :]).size())
                     loss += self.loss_fn(prediction, (videos[t][b, c, :, :]))
                 
             
