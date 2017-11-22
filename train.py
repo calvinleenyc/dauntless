@@ -26,7 +26,7 @@ class Trainer:
         self.loss_fn = nn.MSELoss()
         self.optimizer = torch.optim.Adam(rnn.parameters(), lr = lr_rate)
         self.state_predict_optimizer = torch.optim.Adam(state_predictor.parameters(), lr = lr_rate)
-        self.writer = SummaryWriter()
+        #self.writer = SummaryWriter()
         self.epoch = 0
 
     def train(self):
