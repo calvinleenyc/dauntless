@@ -67,15 +67,15 @@ class Trainer:
             tiled.append(this_batch)
         tiled = np.array(tiled)
         
-        hidden = rnn.initHidden(BATCH_SIZE)
-        cell = rnn.initCell(BATCH_SIZE)
+        hidden = self.rnn.initHidden(BATCH_SIZE)
+        cell = self.rnn.initCell(BATCH_SIZE)
 
         loss = 0
         state_prediction_loss = 0
         for t in range(TRAIN_LEN - 1):
             print(videos[:, t, :, :,:].size())
             print(wrap(tiled[:, t, :, :, :]).size())
-            masks, kernels, hidden, cell = rnn(videos[:, t, :, :, :], wrap(tiled[:, t, :, :, :]), hidden, cell)
+            masks, kernels, hidden, cell = self.rnn(videos[:, t, :, :, :], wrap(tiled[:, t, :, :, :]), hidden, cell)
 
             
             for b in range(BATCH_SIZE):
@@ -94,11 +94,11 @@ class Trainer:
                     prediction = torch.sum(transformed_images[:, c, :, :] * masks[b], dim = 0)
                     print(prediction.size())
                     #print(wrap(videos[b, t, c, :, :]).size())
-                    loss += loss_fn(prediction, wrap(videos[b, t, c, :, :]))
+                    loss += self.loss_fn(prediction, (videos[b, t, c, :, :]))
                 
             
-            predicted_state = state_predictor(wrap(stactions[:, t, :]))
-            state_prediction_loss += loss_fn(predicted_state, wrap(states[:, t, :]))
+            predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
+            state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t, :]))
 
 
         loss.backward()
