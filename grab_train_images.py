@@ -17,7 +17,7 @@ FLAGS = flags.FLAGS
 ORIGINAL_WIDTH = 640
 ORIGINAL_HEIGHT = 512
 COLOR_CHAN = 3
-BATCH_SIZE = 25
+BATCH_SIZE = 5
 
 # On p.6: We train for 8 future time steps.
 # (so 9 total)

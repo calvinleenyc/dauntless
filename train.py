@@ -29,6 +29,37 @@ class Trainer:
         #self.writer = SummaryWriter()
         self.epoch = 0
 
+    @staticmethod
+    def normalize_and_downsample(videos):
+        # videos.size() = BATCH_SIZE x TRAIN_LEN x 512 x 640 x 3
+        videos = np.array(videos, dtype = np.float32)
+        # Need to rearrange [videos], so that channel comes before height, width
+        videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
+        videos = np.concatenate(videos, axis = 0)
+        
+        videos = torch.FloatTensor(videos)
+        #videos = torch.FloatTensor(videos).contiguous().view([-1, 3, 512, 640])
+        videos = F.max_pool2d(videos, (8, 10))
+        videos = torch.stack(torch.split(videos, TRAIN_LEN, dim = 0))
+        return videos / 256 - 0.5
+
+    @staticmethod
+    def slow_normalize_and_downsample(videos):
+        videos = np.array(videos, dtype = np.float32)
+        # Need to rearrange [videos], so that channel comes before height, width
+        videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
+
+        ans = np.zeros([BATCH_SIZE, TRAIN_LEN, 3, 64, 64])
+        for b in range(BATCH_SIZE):
+            for t in range(TRAIN_LEN):
+                for c in range(3):
+                    for i in range(64):
+                        for j in range(64):
+                            ans[b,t,c,i,j] = np.max([[videos[b, t, c, i * 8 + di, j * 10 + dj] for di in range(8)] for dj in range(10)])
+                            
+        ans = np.array(ans, dtype = np.float32)
+        return torch.FloatTensor(ans) / 256 - 0.5
+
     def train(self):
         def wrap(array):
             return Variable(torch.FloatTensor(array))
@@ -36,20 +67,14 @@ class Trainer:
         
         self.epoch += 1
         videos, states, actions = self.sess.run(self.data_getter)
-        videos = np.array(videos, dtype = np.float32) # 25 x 9 x 512 x 640 x 3
+        videos = Trainer.normalize_and_downsample(videos)
         #print(np.shape(videos))
         #print(np.shape(states))
         #print(np.shape(actions))
-
-        # Normalize and downsample all of [videos]
-
-        # Need to rearrange [videos], so that channel comes before height, width
-        videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
-        videos = torch.FloatTensor(videos).contiguous().view([-1, 3, 512, 640])
-        videos = F.max_pool2d(videos, (8, 10))
+        
         #print(videos.size())
 
-        videos = videos.view([BATCH_SIZE, TRAIN_LEN, 3, 64, 64]) / 256 - 0.5
+        
 
                      
         # CONSIDER wrapping more things here instead of down there
@@ -111,8 +136,17 @@ class Trainer:
         # p.5: We only get the agent's internal state at the beginning.
         videos, states, actions = self.sess.run(self.test_data)
         return
-        
-if __name__ == '__main__':
+
+
+run_tests = True
+if run_tests:
+    videos = np.random.randn(BATCH_SIZE,TRAIN_LEN,512,640,3)
+    #ans = Trainer.normalize_and_downsample(videos)
+    #ans2 = Trainer.slow_normalize_and_downsample(videos)
+    #diff = F.mse_loss(ans, ans2)
+    print(videos.size())
+    
+if __name__ == '__main__' and not run_tests:
     rnn = CDNA()
     # On page 11: "The next state is predicted linearly from the current state and action."
     state_predictor = nn.Linear(10, 5)
@@ -121,4 +155,4 @@ if __name__ == '__main__':
     
     for i in range(3):
         print("HELLO!")
-        trainer.train()
+        # trainer.train()

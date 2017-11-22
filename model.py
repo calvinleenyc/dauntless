@@ -166,6 +166,14 @@ if __name__ == '__main__':
     qqq = q[0].data.numpy()
     print(np.sum(qqq[2,:,2,3]))
 
+    loss_fn = nn.MSELoss()
 
+    print(q[0][0][0][0][0])
+    loss = q[0][0][0][0][0]
+    print(loss)
+    loss.backward()
+
+    optim = torch.optim.Adam(rnn.parameters(), lr = 0.001)
+    optim.step()
 
     print(rnn.num_params()) # Concerning: should be 12.6M...?  Maybe the CDNA is special?
