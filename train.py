@@ -87,6 +87,7 @@ class Trainer:
             ans.append(transformed_images)
         return torch.stack(ans)
 
+    @staticmethod
     def expected_pixel(options, masks):
         # options has size (BATCH_SIZE, 11, 3, 64, 64)
         # masks has size (BATCH_SIZE, 11, 64, 64)
@@ -95,7 +96,7 @@ class Trainer:
         for b in range(BATCH_SIZE):
             here = []
             for c in range(3):
-                prediction = torch.sum(transformed_images[b, :, c, :, :] * masks[b], dim = 0)
+                prediction = torch.sum(options[b, :, c, :, :] * masks[b], dim = 0)
                 here.append(prediction)
             ans.append(torch.stack(here))
         return torch.stack(ans)
@@ -167,7 +168,7 @@ class Trainer:
         return
 
 
-run_tests = False
+run_tests = True
 if run_tests:
     run_all = False
     run_n_and_d = False
@@ -187,6 +188,13 @@ if run_tests:
         print(ans.size())
         diff = F.mse_loss(ans, ans2)
         print(diff)
+
+    run_expected_pixel = True
+    if run_expected_pixel or run_all:
+        options = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 11, 3, 64, 64)))
+        masks = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 11, 64, 64)))
+        ans = Trainer.expected_pixel(options, masks)
+        print(ans.size())
     
     
 if __name__ == '__main__' and not run_tests:
