@@ -21,7 +21,7 @@ BATCH_SIZE = 5
 
 # On p.6: We train for 8 future time steps.
 # (so 9 total)
-TRAIN_LEN = 9
+TRAIN_LEN = 3
 
 def build_image_input(train=True, novel=True):
   """Create input tfrecord tensors.

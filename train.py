@@ -131,7 +131,6 @@ class Trainer:
         
         # Each frame will now be processed separately
         videos = torch.unbind(small_videos, dim = 1)
-        print(type(videos[0]))
                      
         # CONSIDER wrapping more things here instead of down there
         
@@ -155,6 +154,9 @@ class Trainer:
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
 
+        loss = 0
+        
+        self.optimizer.zero_grad()
         self.state_predict_optimizer.zero_grad()
 
         state_prediction_loss = 0
@@ -166,18 +168,15 @@ class Trainer:
 
             predictions = Trainer.expected_pixel(transformed_images, masks)
 
-            #loss += self.loss_fn(predictions, videos[t + 1])
-            loss_here = masks[0][0][0][0][0]
-            self.optimizer.zero_grad()
-            loss_here.backward()
-            self.optimizer.step()
+            loss += self.loss_fn(predictions, Variable(videos[t + 1], requires_grad = False))
+            #loss += masks[0][0][0][0][0]
             
             predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
             state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t + 1, :]))
 
-        
+        loss.backward()
         state_prediction_loss.backward()
-        
+        self.optimizer.step()
         self.state_predict_optimizer.step()
         return loss
 
