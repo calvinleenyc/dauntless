@@ -37,9 +37,9 @@ class Trainer:
         self.epoch += 1
         videos, states, actions = self.sess.run(self.data_getter)
         videos = np.array(videos, dtype = np.float32) # 25 x 9 x 512 x 640 x 3
-        print(np.shape(videos))
-        print(np.shape(states))
-        print(np.shape(actions))
+        #print(np.shape(videos))
+        #print(np.shape(states))
+        #print(np.shape(actions))
 
         # Normalize and downsample all of [videos]
 
@@ -47,7 +47,7 @@ class Trainer:
         videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
         videos = torch.FloatTensor(videos).contiguous().view([-1, 3, 512, 640])
         videos = F.max_pool2d(videos, (8, 10))
-        print(videos.size())
+        #print(videos.size())
 
         videos = videos.view([BATCH_SIZE, TRAIN_LEN, 3, 64, 64]) / 256 - 0.5
 
@@ -73,8 +73,8 @@ class Trainer:
         loss = 0
         state_prediction_loss = 0
         for t in range(TRAIN_LEN - 1):
-            print(videos[:, t, :, :,:].size())
-            print(wrap(tiled[:, t, :, :, :]).size())
+            #print(videos[:, t, :, :,:].size())
+            #print(wrap(tiled[:, t, :, :, :]).size())
             masks, kernels, hidden, cell = self.rnn(videos[:, t, :, :, :], wrap(tiled[:, t, :, :, :]), hidden, cell)
 
             
@@ -86,13 +86,13 @@ class Trainer:
                 # append original # TODO: Replace this with STATIC BACKGROUND
                 transformed_images = torch.cat((transformed_images, videos[b, t, :, :, :].view([1, 3, 64, 64])), 0) # 11 x 3 x 64 x 64
 
-                print(transformed_images.size())
+                #print(transformed_images.size())
                 
                 # Now need to take an average, as dictated by the mask
                 # Potentially there's a more subtle way here, using broadcasting
                 for c in range(3):
                     prediction = torch.sum(transformed_images[:, c, :, :] * masks[b], dim = 0)
-                    print(prediction.size())
+                    #print(prediction.size())
                     #print(wrap(videos[b, t, c, :, :]).size())
                     loss += self.loss_fn(prediction, (videos[b, t, c, :, :]))
                 
@@ -119,5 +119,6 @@ if __name__ == '__main__':
     trainer = Trainer(rnn, state_predictor)
 
     
-    while True:
+    for i in range(3):
+        print("HELLO!")
         trainer.train()
