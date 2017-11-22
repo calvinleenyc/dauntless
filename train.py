@@ -23,7 +23,9 @@ class Trainer:
         sess.run(tf.global_variables_initializer())
         self.sess = sess
 
+        self.loss_fn = nn.MSELoss()
         self.optimizer = torch.optim.Adam(rnn.parameters(), lr = lr_rate)
+        self.state_predict_optimizer = torch.optim.Adam(state_predictor.parameters(), lr = lr_rate)
         self.writer = SummaryWriter()
         self.epoch = 0
 
@@ -33,6 +35,8 @@ class Trainer:
     def train(self):
         epoch += 1
         videos, states, actions = self.sess.run(self.data_getter)
+        # CONSIDER wrapping things here instead of down there
+        
         stactions = np.concatenate([states, actions], axis = 2)
         
         # Spatial tiling of state and action, as described on p.5
@@ -52,13 +56,36 @@ class Trainer:
         hidden = rnn.initHidden(BATCH_SIZE)
         cell = rnn.initCell(BATCH_SIZE)
 
-        for t in range(TRAIN_LEN):
-            out, kernels, hidden, cell = rnn(wrap(videos[:, t, :, :, :]), wrap(tiled[:, t, :, :, :]), hidden, cell)
-            predicted_state = state_predictor(wrap(stactions[:, t, :]))
+        loss = 0
+        state_prediction_loss = 0
+        for t in range(TRAIN_LEN - 1):
+            masks, kernels, hidden, cell = rnn(wrap(videos[:, t, :, :, :]), wrap(tiled[:, t, :, :, :]), hidden, cell)
 
             
+            for b in range(BATCH_SIZE):
+                ########### SUBTLE CODE, PLEASE REVIEW ###############
+                # We pretend that the batch is the 3 input channels.
+                transformed_images = F.conv2d(videos[b, t, :, :, :].view([3, 1, 64, 64]), kernels.view([10, 1, 5, 5]), padding = 2) # 3 x 10 x 64 x 64
+                transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
+                # append original # TODO: Replace this with STATIC BACKGROUND
+                transformed_images = torch.cat((transformed_images, videos[b, t, :, :, :].view([1, 10, 64, 64])), 0) # 11 x 3 x 64 x 64
+                
+                # Now need to take an average, as dictated by the mask
+                # Potentially there's a more subtle way here, using broadcasting
+                for c in range(3):
+                    prediction = torch.sum(transformed_images[:, c, :, :] * masks, dim = 0)
+                    loss += loss_fn(prediction, wrap(videos[b, t, c, :, :])
+                
             
-        return
+            predicted_state = state_predictor(wrap(stactions[:, t, :]))
+            state_prediction_loss += loss_fn(predicted_state, wrap(states[:, t, :]))
+
+
+        loss.backward()
+        state_prediction_loss.backward()
+        self.optimizer.step()
+        self.state_predict_optimizer.step()
+        return loss
 
     def test(self):
         # p.5: We only get the agent's internal state at the beginning.
