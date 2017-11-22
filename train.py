@@ -87,13 +87,31 @@ class Trainer:
             ans.append(transformed_images)
         return torch.stack(ans)
 
+    def expected_pixel(options, masks):
+        # options has size (BATCH_SIZE, 11, 3, 64, 64)
+        # masks has size (BATCH_SIZE, 11, 64, 64)
+        # output has size (BATCH_SIZE, 3, 64, 64)
+        ans = []
+        for b in range(BATCH_SIZE):
+            here = []
+            for c in range(3):
+                prediction = torch.sum(transformed_images[b, :, c, :, :] * masks[b], dim = 0)
+                here.append(prediction)
+            ans.append(torch.stack(here))
+        return torch.stack(ans)
+
     def train(self):
         def wrap(array):
             return Variable(torch.FloatTensor(array))
 
         
         self.epoch += 1
-        videos, states, actions = self.sess.run(self.data_getter)
+        #videos, states, actions = self.sess.run(self.data_getter)
+        videos = np.random.randn(BATCH_SIZE,TRAIN_LEN,512,640,3)
+        states = np.random.randn(BATCH_SIZE,TRAIN_LEN,5)
+        actions = np.random.randn(BATCH_SIZE, TRAIN_LEN,5)
+
+        
         videos = Trainer.normalize_and_downsample(videos)
         
         # Each frame will now be processed separately
@@ -127,20 +145,14 @@ class Trainer:
         for t in range(TRAIN_LEN - 1):
             masks, kernels, hidden, cell = self.rnn(videos[t], tiled[t], hidden, cell)
 
-            transformed_images = apply_kernels(videos[t], kernels)
-            
-            for b in range(BATCH_SIZE):
-                ########### SUBTLE CODE, PLEASE REVIEW ###############
-                
-                # Now need to take an average, as dictated by the mask
-                # Potentially there's a more subtle way here, using broadcasting
-                for c in range(3):
-                    prediction = torch.sum(transformed_images[b, :, c, :, :] * masks[b], dim = 0)
-                    loss += self.loss_fn(prediction, (videos[t][b, c, :, :]))
-                
+            transformed_images = Trainer.apply_kernels(videos[t], kernels)
+
+            predictions = Trainer.expected_pixel(transformed_images, masks)
+
+            loss += self.loss_fn(prediction, videos[t + 1])            
             
             predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
-            state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t, :]))
+            state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t + 1, :]))
 
 
         loss.backward()
@@ -155,7 +167,7 @@ class Trainer:
         return
 
 
-run_tests = True
+run_tests = False
 if run_tests:
     run_all = False
     run_n_and_d = False
@@ -186,4 +198,4 @@ if __name__ == '__main__' and not run_tests:
     
     for i in range(3):
         print("HELLO!")
-        # trainer.train()
+        trainer.train()
