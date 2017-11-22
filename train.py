@@ -140,6 +140,7 @@ class Trainer:
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
 
+        self.optimizer.zero_grad()
         loss = 0
         state_prediction_loss = 0
         
