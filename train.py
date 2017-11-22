@@ -35,12 +35,9 @@ class Trainer:
         videos = np.array(videos, dtype = np.float32)
         # Need to rearrange [videos], so that channel comes before height, width
         videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
-        videos = np.concatenate(videos, axis = 0)
-        
+
         videos = torch.FloatTensor(videos)
-        #videos = torch.FloatTensor(videos).contiguous().view([-1, 3, 512, 640])
-        videos = F.max_pool2d(videos, (8, 10))
-        videos = torch.stack(torch.split(videos, TRAIN_LEN, dim = 0))
+        videos = F.max_pool3d(videos, (1, 8, 10))
         return videos / 256 - 0.5
 
     @staticmethod
@@ -60,6 +57,8 @@ class Trainer:
         ans = np.array(ans, dtype = np.float32)
         return torch.FloatTensor(ans) / 256 - 0.5
 
+    
+
     def train(self):
         def wrap(array):
             return Variable(torch.FloatTensor(array))
@@ -68,13 +67,6 @@ class Trainer:
         self.epoch += 1
         videos, states, actions = self.sess.run(self.data_getter)
         videos = Trainer.normalize_and_downsample(videos)
-        #print(np.shape(videos))
-        #print(np.shape(states))
-        #print(np.shape(actions))
-        
-        #print(videos.size())
-
-        
 
                      
         # CONSIDER wrapping more things here instead of down there
@@ -140,11 +132,16 @@ class Trainer:
 
 run_tests = True
 if run_tests:
-    videos = np.random.randn(BATCH_SIZE,TRAIN_LEN,512,640,3)
-    ans = Trainer.normalize_and_downsample(videos)
-    ans2 = Trainer.slow_normalize_and_downsample(videos)
-    diff = F.mse_loss(ans, ans2)
-    print(diff)
+    run_all = False
+    run_n_and_d = True
+    if run_n_and_d or run_all:
+        videos = np.random.randn(BATCH_SIZE,TRAIN_LEN,512,640,3)
+        ans = Trainer.normalize_and_downsample(videos)
+        ans2 = Trainer.slow_normalize_and_downsample(videos)
+        diff = F.mse_loss(ans, ans2)
+        print(diff)
+
+    
     
 if __name__ == '__main__' and not run_tests:
     rnn = CDNA()
