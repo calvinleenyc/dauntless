@@ -57,8 +57,6 @@ class Trainer:
         ans = np.array(ans, dtype = np.float32)
         return torch.FloatTensor(ans) / 256 - 0.5
 
-    
-
     def train(self):
         def wrap(array):
             return Variable(torch.FloatTensor(array))
@@ -67,7 +65,9 @@ class Trainer:
         self.epoch += 1
         videos, states, actions = self.sess.run(self.data_getter)
         videos = Trainer.normalize_and_downsample(videos)
-
+        
+        # Each frame will now be processed separately
+        videos = torch.unbind(videos, dim = 1)
                      
         # CONSIDER wrapping more things here instead of down there
         
@@ -82,26 +82,25 @@ class Trainer:
                 spatial_tiling = np.transpose(spatial_tiling)
                 this_batch.append(spatial_tiling)
             tiled.append(this_batch)
-        tiled = np.array(tiled)
+        tiled = np.array(tiled) # maybe np.stack
         
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
 
         loss = 0
         state_prediction_loss = 0
+        
         for t in range(TRAIN_LEN - 1):
-            #print(videos[:, t, :, :,:].size())
-            #print(wrap(tiled[:, t, :, :, :]).size())
-            masks, kernels, hidden, cell = self.rnn(videos[:, t, :, :, :], wrap(tiled[:, t, :, :, :]), hidden, cell)
+            masks, kernels, hidden, cell = self.rnn(videos[t], wrap(tiled[:, t, :, :, :]), hidden, cell)
 
             
             for b in range(BATCH_SIZE):
                 ########### SUBTLE CODE, PLEASE REVIEW ###############
                 # We pretend that the batch is the 3 input channels.
-                transformed_images = F.conv2d(videos[b, t, :, :, :].view([3, 1, 64, 64]), kernels[b].view([10, 1, 5, 5]), padding = 2) # 3 x 10 x 64 x 64
+                transformed_images = F.conv2d(videos[t][b, :, :, :].view([3, 1, 64, 64]), kernels[b].view([10, 1, 5, 5]), padding = 2) # 3 x 10 x 64 x 64
                 transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
                 # append original # TODO: Replace this with STATIC BACKGROUND
-                transformed_images = torch.cat((transformed_images, videos[b, t, :, :, :].view([1, 3, 64, 64])), 0) # 11 x 3 x 64 x 64
+                transformed_images = torch.cat((transformed_images, videos[t][b, :, :, :].view([1, 3, 64, 64])), 0) # 11 x 3 x 64 x 64
 
                 #print(transformed_images.size())
                 
@@ -111,7 +110,7 @@ class Trainer:
                     prediction = torch.sum(transformed_images[:, c, :, :] * masks[b], dim = 0)
                     #print(prediction.size())
                     #print(wrap(videos[b, t, c, :, :]).size())
-                    loss += self.loss_fn(prediction, (videos[b, t, c, :, :]))
+                    loss += self.loss_fn(prediction, (videos[t][b, c, :, :]))
                 
             
             predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
@@ -133,7 +132,7 @@ class Trainer:
 run_tests = True
 if run_tests:
     run_all = False
-    run_n_and_d = True
+    run_n_and_d = False
     if run_n_and_d or run_all:
         videos = np.random.randn(BATCH_SIZE,TRAIN_LEN,512,640,3)
         ans = Trainer.normalize_and_downsample(videos)
