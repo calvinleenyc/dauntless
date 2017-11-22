@@ -36,7 +36,23 @@ class Trainer:
         
         self.epoch += 1
         videos, states, actions = self.sess.run(self.data_getter)
-        # CONSIDER wrapping things here instead of down there
+        videos = np.array(videos, dtype = np.float32) # 25 x 9 x 512 x 640 x 3
+        print(np.shape(videos))
+        print(np.shape(states))
+        print(np.shape(actions))
+
+        # Normalize and downsample all of [videos]
+
+        # Need to rearrange [videos], so that channel comes before height, width
+        videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
+        videos = torch.FloatTensor(videos).contiguous().view([-1, 3, 512, 640])
+        videos = F.max_pool2d(videos, (8, 10))
+        print(videos.size())
+
+        videos = videos.view([BATCH_SIZE, TRAIN_LEN, 3, 64, 64]) / 256 - 0.5
+
+                     
+        # CONSIDER wrapping more things here instead of down there
         
         stactions = np.concatenate([states, actions], axis = 2)
         # Spatial tiling of state and action, as described on p.5
@@ -46,12 +62,10 @@ class Trainer:
             for t in range(TRAIN_LEN):
                 spatial_tiling = np.tile(stactions[b, t, :], (8, 8, 1))
                 assert(np.shape(spatial_tiling) == (8, 8, 10))
+                spatial_tiling = np.transpose(spatial_tiling)
                 this_batch.append(spatial_tiling)
             tiled.append(this_batch)
         tiled = np.array(tiled)
-        
-        # Need to rearrange [videos], so that channel comes before height, width
-        videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
         
         hidden = rnn.initHidden(BATCH_SIZE)
         cell = rnn.initCell(BATCH_SIZE)
@@ -59,21 +73,27 @@ class Trainer:
         loss = 0
         state_prediction_loss = 0
         for t in range(TRAIN_LEN - 1):
-            masks, kernels, hidden, cell = rnn(wrap(videos[:, t, :, :, :]), wrap(tiled[:, t, :, :, :]), hidden, cell)
+            print(videos[:, t, :, :,:].size())
+            print(wrap(tiled[:, t, :, :, :]).size())
+            masks, kernels, hidden, cell = rnn(videos[:, t, :, :, :], wrap(tiled[:, t, :, :, :]), hidden, cell)
 
             
             for b in range(BATCH_SIZE):
                 ########### SUBTLE CODE, PLEASE REVIEW ###############
                 # We pretend that the batch is the 3 input channels.
-                transformed_images = F.conv2d(videos[b, t, :, :, :].view([3, 1, 64, 64]), kernels.view([10, 1, 5, 5]), padding = 2) # 3 x 10 x 64 x 64
+                transformed_images = F.conv2d(videos[b, t, :, :, :].view([3, 1, 64, 64]), kernels[b].view([10, 1, 5, 5]), padding = 2) # 3 x 10 x 64 x 64
                 transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
                 # append original # TODO: Replace this with STATIC BACKGROUND
-                transformed_images = torch.cat((transformed_images, videos[b, t, :, :, :].view([1, 10, 64, 64])), 0) # 11 x 3 x 64 x 64
+                transformed_images = torch.cat((transformed_images, videos[b, t, :, :, :].view([1, 3, 64, 64])), 0) # 11 x 3 x 64 x 64
+
+                print(transformed_images.size())
                 
                 # Now need to take an average, as dictated by the mask
                 # Potentially there's a more subtle way here, using broadcasting
                 for c in range(3):
-                    prediction = torch.sum(transformed_images[:, c, :, :] * masks, dim = 0)
+                    prediction = torch.sum(transformed_images[:, c, :, :] * masks[b], dim = 0)
+                    print(prediction.size())
+                    #print(wrap(videos[b, t, c, :, :]).size())
                     loss += loss_fn(prediction, wrap(videos[b, t, c, :, :]))
                 
             

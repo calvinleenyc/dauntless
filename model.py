@@ -55,9 +55,8 @@ class CDNA(nn.Module):
         # so I use this instead: given a 4D tensor, it softmaxes dimension 1.
         self.softmax = nn.Softmax2d()
         
-    def forward(self, input, hiddens, cells):
+    def forward(self, img, tiled, hiddens, cells):
         # input is preprocessed with numpy (at least for now)
-        img, tiled = input
         layer0 = self.conv1(img)
         #print("layer0")
         #print(layer0.size())
@@ -157,7 +156,7 @@ if __name__ == '__main__':
     hidden = rnn.initHidden(4)
     cell = rnn.initCell(4)
 
-    q = rnn((img, tiled), hidden, cell)
+    q = rnn(img, tiled, hidden, cell)
     print(q[0])
     print(q[1])
 
