@@ -141,10 +141,10 @@ class Trainer:
 run_tests = True
 if run_tests:
     videos = np.random.randn(BATCH_SIZE,TRAIN_LEN,512,640,3)
-    #ans = Trainer.normalize_and_downsample(videos)
-    #ans2 = Trainer.slow_normalize_and_downsample(videos)
-    #diff = F.mse_loss(ans, ans2)
-    print(videos.size())
+    ans = Trainer.normalize_and_downsample(videos)
+    ans2 = Trainer.slow_normalize_and_downsample(videos)
+    diff = F.mse_loss(ans, ans2)
+    print(diff)
     
 if __name__ == '__main__' and not run_tests:
     rnn = CDNA()
