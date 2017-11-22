@@ -123,16 +123,14 @@ class Trainer:
 
         
         self.epoch += 1
-        #videos, states, actions = self.sess.run(self.data_getter)
-        videos = np.random.randn(BATCH_SIZE,TRAIN_LEN,512,640,3)
-        states = np.random.randn(BATCH_SIZE,TRAIN_LEN,5)
-        actions = np.random.randn(BATCH_SIZE, TRAIN_LEN,5)
+        videos, states, actions = self.sess.run(self.data_getter)
 
         
-        videos = Trainer.normalize_and_downsample(videos)
+        small_videos = Trainer.normalize_and_downsample(videos)
+        del videos
         
         # Each frame will now be processed separately
-        videos = torch.unbind(videos, dim = 1)
+        videos = torch.unbind(small_videos, dim = 1)
                      
         # CONSIDER wrapping more things here instead of down there
         
@@ -157,6 +155,7 @@ class Trainer:
         cell = self.rnn.initCell(BATCH_SIZE)
 
         self.optimizer.zero_grad()
+        self.state_predict_optimizer.zero_grad()
         loss = 0
         state_prediction_loss = 0
         
@@ -167,12 +166,13 @@ class Trainer:
 
             predictions = Trainer.expected_pixel(transformed_images, masks)
 
-            loss += self.loss_fn(predictions, videos[t + 1])
+            #loss += self.loss_fn(predictions, videos[t + 1])
+            loss += masks[0][0][0][0][0]
             
             predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
             state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t + 1, :]))
 
-
+        
         loss.backward()
         state_prediction_loss.backward()
         self.optimizer.step()
@@ -224,6 +224,6 @@ if __name__ == '__main__' and not run_tests:
     trainer = Trainer(rnn, state_predictor)
 
     
-    for i in range(1):
+    for i in range(2):
         print("HELLO!")
-        trainer.train()
+        print(trainer.train())
