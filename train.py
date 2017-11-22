@@ -17,7 +17,7 @@ class Trainer:
         self.state_predictor = state_predictor
         print("Preparing to get data from tfrecord.")
         self.data_getter = build_image_input()
-        self.test_data = build_image_input(train = False, novel = False) # Eventually, we'll want this to be True
+        # self.test_data = build_image_input(train = False, novel = False) # Eventually, we'll want this to be True
         sess = tf.InteractiveSession()
         tf.train.start_queue_runners(sess)
         sess.run(tf.global_variables_initializer())
@@ -29,16 +29,16 @@ class Trainer:
         self.writer = SummaryWriter()
         self.epoch = 0
 
-    def wrap(array):
-        return Variable(torch.FloatTensor(array))
-
     def train(self):
-        epoch += 1
+        def wrap(array):
+            return Variable(torch.FloatTensor(array))
+
+        
+        self.epoch += 1
         videos, states, actions = self.sess.run(self.data_getter)
         # CONSIDER wrapping things here instead of down there
         
         stactions = np.concatenate([states, actions], axis = 2)
-        
         # Spatial tiling of state and action, as described on p.5
         tiled = []
         for b in range(BATCH_SIZE):
@@ -74,7 +74,7 @@ class Trainer:
                 # Potentially there's a more subtle way here, using broadcasting
                 for c in range(3):
                     prediction = torch.sum(transformed_images[:, c, :, :] * masks, dim = 0)
-                    loss += loss_fn(prediction, wrap(videos[b, t, c, :, :])
+                    loss += loss_fn(prediction, wrap(videos[b, t, c, :, :]))
                 
             
             predicted_state = state_predictor(wrap(stactions[:, t, :]))
