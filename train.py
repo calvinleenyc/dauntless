@@ -37,7 +37,7 @@ class Trainer:
         videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
 
         videos = torch.FloatTensor(videos)
-        videos = F.max_pool3d(videos, (1, 8, 10))
+        videos = F.max_pool3d(videos, (1, 8, 10)).data
         return videos / 256 - 0.5
 
     @staticmethod
@@ -131,6 +131,7 @@ class Trainer:
         
         # Each frame will now be processed separately
         videos = torch.unbind(small_videos, dim = 1)
+        print(type(videos[0]))
                      
         # CONSIDER wrapping more things here instead of down there
         
@@ -154,28 +155,29 @@ class Trainer:
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
 
-        self.optimizer.zero_grad()
         self.state_predict_optimizer.zero_grad()
-        loss = 0
+
         state_prediction_loss = 0
         
         for t in range(TRAIN_LEN - 1):
-            masks, kernels, hidden, cell = self.rnn(videos[t], Variable(tiled[t]), hidden, cell)
+            masks, kernels, hidden, cell = self.rnn(Variable(videos[t]), Variable(tiled[t]), hidden, cell)
 
-            transformed_images = Trainer.apply_kernels(videos[t], kernels)
+            transformed_images = Trainer.apply_kernels(Variable(videos[t]), kernels)
 
             predictions = Trainer.expected_pixel(transformed_images, masks)
 
             #loss += self.loss_fn(predictions, videos[t + 1])
-            loss += masks[0][0][0][0][0]
+            loss_here = masks[0][0][0][0][0]
+            self.optimizer.zero_grad()
+            loss_here.backward()
+            self.optimizer.step()
             
             predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
             state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t + 1, :]))
 
         
-        loss.backward()
         state_prediction_loss.backward()
-        self.optimizer.step()
+        
         self.state_predict_optimizer.step()
         return loss
 
