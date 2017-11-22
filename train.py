@@ -76,9 +76,10 @@ class Trainer:
     def apply_kernels(imgs, kernels):
         # imgs has size (BATCH_SIZE, 3, 64, 64)
         # kernels has size (BATCH_SIZE, 10, 5, 5)
-        # output has size (BATCH_SIZE, 11, 3, 64, 64)
+        # output is a list of length BATCH_SIZE with arrays with size (11, 3, 64, 64)
         
         ans = []
+        kernels = torch.unbind(kernels, dim = 0)
         for b in range(BATCH_SIZE):
             # We pretend that the batch is the 3 input channels.
             transformed_images = F.conv2d(torch.unsqueeze(imgs[b, :, :, :], dim = 1), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
@@ -86,22 +87,36 @@ class Trainer:
             # append original # TODO: Replace this with STATIC BACKGROUND
             transformed_images = torch.cat((transformed_images, torch.unsqueeze(imgs[b, :, :, :], dim = 0)), 0) # 11 x 3 x 64 x 64
             ans.append(transformed_images)
-        return torch.stack(ans)
+        return ans
 
     @staticmethod
     def expected_pixel(options, masks):
-        # options has size (BATCH_SIZE, 11, 3, 64, 64)
+        # options is the output of apply_kernels
         # masks has size (BATCH_SIZE, 11, 64, 64)
         # output has size (BATCH_SIZE, 3, 64, 64)
         ans = []
+        masks = torch.unbind(masks, dim = 0)
         for b in range(BATCH_SIZE):
             here = []
             for c in range(3):
-                prediction = torch.sum(options[b, :, c, :, :] * masks[b], dim = 0)
+                prediction = torch.sum(options[b][:, c, :, :] * masks[b], dim = 0)
                 here.append(prediction)
             ans.append(torch.stack(here))
         return torch.stack(ans)
 
+    @staticmethod
+    def slow_expected_pixel(options, masks):
+        ans = torch.zeros(BATCH_SIZE, 3, 64, 64)
+        
+        for b in range(BATCH_SIZE):
+            for c in range(3):
+                for i in range(64):
+                    for j in range(64):
+                        for q in range(11):
+                            ans[b][c][i][j] += options.data[b, q, c, i, j] * masks.data[b, q, i, j]
+        return ans
+
+    
     def train(self):
         def wrap(array):
             return Variable(torch.FloatTensor(array))
@@ -170,7 +185,7 @@ class Trainer:
         return
 
 
-run_tests = True
+run_tests = False
 if run_tests:
     run_all = False
     run_n_and_d = False
@@ -181,7 +196,7 @@ if run_tests:
         diff = F.mse_loss(ans, ans2)
         print(diff)
 
-    run_apply_kernels = True
+    run_apply_kernels = False
     if run_apply_kernels or run_all:
         imgs = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 3, 64, 64)))
         kernels = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 10, 5, 5)))
@@ -191,11 +206,14 @@ if run_tests:
         diff = F.mse_loss(ans, ans2)
         print(diff)
 
-    run_expected_pixel = False
+    run_expected_pixel = True
     if run_expected_pixel or run_all:
         options = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 11, 3, 64, 64)))
         masks = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 11, 64, 64)))
         ans = Trainer.expected_pixel(options, masks)
+        ans2 = Trainer.slow_expected_pixel(options, masks)
+        diff = F.mse_loss(ans, ans2)
+        print(diff)
         print(ans.size())
     
     
