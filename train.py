@@ -145,13 +145,14 @@ class Trainer:
         state_prediction_loss = 0
         
         for t in range(TRAIN_LEN - 1):
-            masks, kernels, hidden, cell = self.rnn(videos[t], tiled[t], hidden, cell)
+            print(type(tiled[t]))
+            masks, kernels, hidden, cell = self.rnn(videos[t], Variable(tiled[t]), hidden, cell)
 
             transformed_images = Trainer.apply_kernels(videos[t], kernels)
 
             predictions = Trainer.expected_pixel(transformed_images, masks)
 
-            loss += self.loss_fn(prediction, videos[t + 1])            
+            loss += self.loss_fn(predictions, videos[t + 1])
             
             predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
             state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t + 1, :]))
@@ -169,7 +170,7 @@ class Trainer:
         return
 
 
-run_tests = True
+run_tests = False
 if run_tests:
     run_all = False
     run_n_and_d = False
