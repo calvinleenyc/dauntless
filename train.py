@@ -57,6 +57,36 @@ class Trainer:
         ans = np.array(ans, dtype = np.float32)
         return torch.FloatTensor(ans) / 256 - 0.5
 
+    @staticmethod
+    def old_apply_kernels(imgs, kernels):
+        # imgs has size (BATCH_SIZE, 3, 64, 64)
+        # kernels has size (BATCH_SIZE, 10, 5, 5)
+        # output has size (BATCH_SIZE, 11, 3, 64, 64)
+        ans = []
+        for b in range(BATCH_SIZE):
+            # We pretend that the batch is the 3 input channels.
+            transformed_images = F.conv2d(imgs[b, :, :, :].view([3, 1, 64, 64]), kernels[b].view([10, 1, 5, 5]), padding = 2) # 3 x 10 x 64 x 64
+            transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
+            # append original # TODO: Replace this with STATIC BACKGROUND
+            transformed_images = torch.cat((transformed_images, imgs[b, :, :, :].view([1, 3, 64, 64])), 0) # 11 x 3 x 64 x 64
+            ans.append(transformed_images)
+        return torch.stack(ans)
+
+    @staticmethod
+    def apply_kernels(imgs, kernels):
+        # imgs has size (BATCH_SIZE, 3, 64, 64)
+        # kernels has size (BATCH_SIZE, 10, 5, 5)
+        # output has size (BATCH_SIZE, 11, 3, 64, 64)
+        ans = []
+        for b in range(BATCH_SIZE):
+            # We pretend that the batch is the 3 input channels.
+            transformed_images = F.conv2d(imgs[b, :, :, :].view([3, 1, 64, 64]), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
+            transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
+            # append original # TODO: Replace this with STATIC BACKGROUND
+            transformed_images = torch.cat((transformed_images, torch.unsqueeze(imgs[b, :, :, :], dim = 0)), 0) # 11 x 3 x 64 x 64
+            ans.append(transformed_images)
+        return torch.stack(ans)
+
     def train(self):
         def wrap(array):
             return Variable(torch.FloatTensor(array))
@@ -97,21 +127,15 @@ class Trainer:
         for t in range(TRAIN_LEN - 1):
             masks, kernels, hidden, cell = self.rnn(videos[t], tiled[t], hidden, cell)
 
+            transformed_images = apply_kernels(videos[t], kernels)
             
             for b in range(BATCH_SIZE):
                 ########### SUBTLE CODE, PLEASE REVIEW ###############
-                # We pretend that the batch is the 3 input channels.
-                transformed_images = F.conv2d(videos[t][b, :, :, :].view([3, 1, 64, 64]), kernels[b].view([10, 1, 5, 5]), padding = 2) # 3 x 10 x 64 x 64
-                transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
-                # append original # TODO: Replace this with STATIC BACKGROUND
-                transformed_images = torch.cat((transformed_images, videos[t][b, :, :, :].view([1, 3, 64, 64])), 0) # 11 x 3 x 64 x 64
-
-                #print(transformed_images.size())
                 
                 # Now need to take an average, as dictated by the mask
                 # Potentially there's a more subtle way here, using broadcasting
                 for c in range(3):
-                    prediction = torch.sum(transformed_images[:, c, :, :] * masks[b], dim = 0)
+                    prediction = torch.sum(transformed_images[b, :, c, :, :] * masks[b], dim = 0)
                     loss += self.loss_fn(prediction, (videos[t][b, c, :, :]))
                 
             
@@ -142,6 +166,15 @@ if run_tests:
         diff = F.mse_loss(ans, ans2)
         print(diff)
 
+    run_apply_kernels = True
+    if run_apply_kernels or run_all:
+        imgs = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 3, 64, 64)))
+        kernels = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 10, 5, 5)))
+        ans = Trainer.apply_kernels(imgs, kernels)
+        ans2 = Trainer.old_apply_kernels(imgs, kernels)
+        print(ans.size())
+        diff = F.mse_loss(ans, ans2)
+        print(diff)
     
     
 if __name__ == '__main__' and not run_tests:
