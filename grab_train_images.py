@@ -54,6 +54,14 @@ def build_image_input(train=True, novel=True):
   image_seq = []
   state_seq = []
   action_seq = []
+
+  background_name = 'pre/image/encoded'
+  features = {background_name: tf.FixedLenFeature([1], tf.string)}
+  features = tf.parse_single_example(serialized_example, features = features)
+  image_buffer = tf.reshape(features[background_name], shape=[])
+  bg_image = tf.image.decode_jpeg(image_buffer, channels = COLOR_CHAN)
+  bg_image.set_shape([ORIGINAL_HEIGHT, ORIGINAL_WIDTH, COLOR_CHAN])
+  bg_image = tf.reshape(bg_image, [1, ORIGINAL_HEIGHT, ORIGINAL_WIDTH, COLOR_CHAN])
   
   for i in range(TRAIN_LEN if train else TEST_LEN):
     image_name = 'move/' + str(i) + '/image/encoded'
@@ -81,7 +89,7 @@ def build_image_input(train=True, novel=True):
 
 
   image_batch = tf.train.batch(
-      [image_seq, state_seq, action_seq],
+      [bg_image, image_seq, state_seq, action_seq],
       BATCH_SIZE,
       num_threads=1,
       capacity=1)

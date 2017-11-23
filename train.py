@@ -38,7 +38,7 @@ class Trainer:
         videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
 
         videos = torch.FloatTensor(videos)
-        videos = F.max_pool3d(videos, (1, 8, 10)).data
+        videos = F.avg_pool3d(videos, (1, 8, 10)).data
         return videos / 256 - 0.5
 
     @staticmethod
@@ -153,11 +153,12 @@ class Trainer:
     
     def train(self):
         self.epoch += 1
-        videos, states, actions = self.sess.run(self.data_getter)
-
-        
+        bg, videos, states, actions = self.sess.run(self.data_getter)
+    
         small_videos = Trainer.normalize_and_downsample(videos)
+        small_bg = Trainer.normalize_and_downsample(bg) # "abuse of notation"
         del videos
+        del bg
         # Each frame will now be processed separately
         videos = torch.unbind(small_videos, dim = 1)
         
@@ -184,18 +185,22 @@ class Trainer:
         self.optimizer.step()
         self.state_predict_optimizer.step()
         self.writer.add_scalar('loss', loss.data.numpy(), self.epoch)
+        self.writer.add_scalar('log_loss', np.log(loss.data.numpy()), self.epoch)
         return loss
 
     def test(self):
-        videos, states, actions = self.sess.run(self.test_data)
+        bg, videos, states, actions = self.sess.run(self.test_data)
         assert(np.shape(states)[1] == 20) # TEST_LEN
+
+        small_videos = Trainer.normalize_and_downsample(videos)
+        small_bg = Trainer.normalize_and_downsample(bg) # "abuse of notation"
+        del videos
+        del bg
         
         # p.5: We only get the agent's internal state at the beginning.
         # For the rest, we must predict it.
         # TODO: Replace all but the first element of [states] with our predictions.
-        
-        small_videos = Trainer.normalize_and_downsample(videos)
-        del videos
+    
         # Each frame will now be processed separately
         videos = torch.unbind(small_videos, dim = 1)
         
