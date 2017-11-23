@@ -3,7 +3,6 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 from torch.autograd import Variable
-from tensorboardX import SummaryWriter
 
 lr_rate = 0.001
 
