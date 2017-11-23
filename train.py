@@ -19,7 +19,6 @@ class Trainer:
         print("Preparing to get data from tfrecord.")
         self.data_getter = build_image_input()
         self.test_data = build_image_input(train = False, novel = False)
-        self.novel_test_data = build_image_input(train = False, novel = True)
         sess = tf.InteractiveSession()
         tf.train.start_queue_runners(sess)
         sess.run(tf.global_variables_initializer())
