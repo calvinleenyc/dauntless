@@ -18,7 +18,8 @@ class Trainer:
         self.state_predictor = state_predictor
         print("Preparing to get data from tfrecord.")
         self.data_getter = build_image_input()
-        self.test_data = build_image_input(train = False, novel = False) # Eventually, we'll want this to be True
+        self.test_data = build_image_input(train = False, novel = False)
+        self.novel_test_data = build_image_input(train = False, novel = True)
         sess = tf.InteractiveSession()
         tf.train.start_queue_runners(sess)
         sess.run(tf.global_variables_initializer())
@@ -32,7 +33,7 @@ class Trainer:
 
     @staticmethod
     def normalize_and_downsample(videos):
-        # videos.size() = BATCH_SIZE x TRAIN_LEN x 512 x 640 x 3
+        # videos.size() = -1 x TRAIN_LEN x 512 x 640 x 3
         videos = np.array(videos, dtype = np.float32)
         # Need to rearrange [videos], so that channel comes before height, width
         videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
@@ -105,9 +106,9 @@ class Trainer:
         return ans
 
     def make_predictions(self, bg, videos, stactions, training):
-        # NOTE: The variable [videos] has already been unbound in dimension 1.
+        # NOTE: The variable [videos] has already been unbound in dimension 1, i.e. videos[t] has size BATCH_SIZE x 3 x 64 x 64.
         
-        # Spatial tiling of state and action, as described on p.5
+        # Compute spatial tiling of state and action, as described on p.5
         tiled = []
         for b in range(BATCH_SIZE):
             this_batch = []
@@ -145,7 +146,7 @@ class Trainer:
         small_videos = Trainer.normalize_and_downsample(videos)
         
         # bg has size (BATCH_SIZE, 1, 512, 640, 3)
-        small_bg = torch.squeeze(Trainer.normalize_and_downsample(bg)) # "abuse of notation"
+        small_bg = torch.squeeze(Trainer.normalize_and_downsample(bg))
         del videos
         del bg
         # Each frame will now be processed separately
@@ -159,7 +160,6 @@ class Trainer:
         self.state_predict_optimizer.zero_grad()
 
         state_prediction_loss = 0
-
         
         predictions = self.make_predictions(small_bg, videos, stactions, training = True)
         
@@ -177,7 +177,6 @@ class Trainer:
         self.writer.add_scalar('state_prediction_loss', state_prediction_loss.data.numpy(), self.epoch)
         self.writer.add_scalar('loss', loss.data.numpy(), self.epoch)
         self.writer.add_scalar('log_loss', np.log(loss.data.numpy()), self.epoch)
-        print(state_prediction_loss)
         return loss
 
     def test(self):
@@ -204,8 +203,9 @@ class Trainer:
         stactions = np.concatenate([states, actions], axis = 2)
         
         predictions = self.make_predictions(small_bg, videos, stactions, training = False)
+        
+        # re-group by original batch
         predictions = torch.stack(predictions, dim = 1)
-
         predictions = torch.unbind(predictions, dim = 0)
 
         for b in range(BATCH_SIZE):
