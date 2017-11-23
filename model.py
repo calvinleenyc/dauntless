@@ -79,13 +79,10 @@ class CDNA(nn.Module):
         input5 = torch.cat((self.downsample45(hidden4), tiled), 1)
         hidden5, cell5 = self.lstm5(input5, hiddens[5], cells[5])
 
-        #### TRICKY - read this again later ####
         kernels = self.to_kernels(hidden5.view([-1, 138 * 8 * 8])).view([-1, 25, 10, 1])
-        # print(kernels)
-        # print(self.softmax(kernels))
         # NOT a channel softmax, but a spatial one
         normalized_kernels = torch.transpose(self.softmax(kernels), 1, 2)
-        normalized_kernels = normalized_kernels.contiguous().view([-1, 10, 5, 5])
+        normalized_kernels = torch.stack(torch.split(torch.squeeze(normalized_kernels), 5, dim = 2), dim = -2)
         # We will wait to transform the images until we compute the loss.
 
         hidden6, cell6 = self.lstm6(self.upsample56(hidden5), hiddens[6], cells[6])
@@ -148,9 +145,21 @@ class CDNA(nn.Module):
         return ans
 
 if __name__ == '__main__':
+
+    # A test for a tricky part of the code
+    qe = Variable(torch.FloatTensor(np.random.randn(11, 10, 25, 1)))
+    ans1 = qe.view([-1, 10, 5, 5])
+    ans2 = torch.stack(torch.split(torch.squeeze(qe), 5, dim = 2), dim = -2)
+    print(type(ans1))
+    print(type(ans2))
+    print(F.mse_loss(ans1, ans2))
+    #exit(0)
+
+
+    
     rnn = CDNA()
     
-    print(rnn.num_params()) # Concerning: should be 12.6M...?  Maybe the CDNA is special?
+    print(rnn.num_params())
 
     img = np.zeros([3, 64, 64])
     tiled = np.zeros([10, 8, 8])
@@ -180,3 +189,4 @@ if __name__ == '__main__':
 
     optim = torch.optim.Adam(rnn.parameters(), lr = 0.001)
     optim.step()
+    print(rnn.num_params()) # Concerning: should be 12.6M...?  Maybe the CDNA is special?
