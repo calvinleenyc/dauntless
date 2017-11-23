@@ -19,9 +19,13 @@ ORIGINAL_HEIGHT = 512
 COLOR_CHAN = 3
 BATCH_SIZE = 5
 
+
 # On p.6: We train for 8 future time steps.
 # (so 9 total)
 TRAIN_LEN = 3
+
+# We show 2 frames, then ask it to predict the next 18.
+TEST_LEN = 20
 
 def build_image_input(train=True, novel=True):
   """Create input tfrecord tensors.
@@ -51,7 +55,7 @@ def build_image_input(train=True, novel=True):
   state_seq = []
   action_seq = []
   
-  for i in range(TRAIN_LEN):
+  for i in range(TRAIN_LEN if train else TEST_LEN):
     image_name = 'move/' + str(i) + '/image/encoded'
     state_name = 'move/' + str(i) + '/endeffector/vec_pitch_yaw'
     action_name = 'move/' + str(i) + '/commanded_pose/vec_pitch_yaw'

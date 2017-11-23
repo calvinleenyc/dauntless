@@ -182,8 +182,20 @@ class Trainer:
         return loss
 
     def test(self):
-        # p.5: We only get the agent's internal state at the beginning.
         videos, states, actions = self.sess.run(self.test_data)
+
+        # p.5: We only get the agent's internal state at the beginning.
+        # For the rest, we must predict it.
+        
+        small_videos = Trainer.normalize_and_downsample(videos)
+        del videos
+        # Each frame will now be processed separately
+        videos = torch.unbind(small_videos, dim = 1)
+        
+        stactions = np.concatenate([states, actions], axis = 2)
+
+        predictions = self.make_predictions(videos, stactions)
+        
         return
 
 
