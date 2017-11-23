@@ -46,7 +46,7 @@ class CDNA(nn.Module):
         self.to_kernels = nn.Linear(64 * 8 * 8, 10 * 5 * 5)
         self.lstm6 = ConvLSTM(16, 64, 32)
         # Note that I couldn't tell from the diagram/description in the paper exactly how many
-        # channels LSTM 7 should have.
+        # channels LSTM 7's hidden layer should have.
         self.lstm7 = ConvLSTM(32, 64 + 32, 64)
         self.conv2 = nn.Conv2d(64 + 32, 11, kernel_size = 1)
 
