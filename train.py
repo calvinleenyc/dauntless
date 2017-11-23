@@ -169,7 +169,6 @@ class Trainer:
             predictions = Trainer.expected_pixel(transformed_images, masks)
 
             loss += self.loss_fn(predictions, Variable(videos[t + 1], requires_grad = False))
-            #loss += masks[0][0][0][0][0]
             
             predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
             state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t + 1, :]))
@@ -225,6 +224,6 @@ if __name__ == '__main__' and not run_tests:
     trainer = Trainer(rnn, state_predictor)
 
     
-    for i in range(2):
+    for i in range(200):
         print("HELLO!")
         print(trainer.train())
