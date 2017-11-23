@@ -116,25 +116,9 @@ class Trainer:
                             ans[b][c][i][j] += options.data[b, q, c, i, j] * masks.data[b, q, i, j]
         return ans
 
-    
-    def train(self):
-        def wrap(array):
-            return Variable(torch.FloatTensor(array))
-
+    def make_predictions(self, videos, stactions):
+        # NOTE: The variable [videos] has already been unbound in dimension 1.
         
-        self.epoch += 1
-        videos, states, actions = self.sess.run(self.data_getter)
-
-        
-        small_videos = Trainer.normalize_and_downsample(videos)
-        del videos
-        
-        # Each frame will now be processed separately
-        videos = torch.unbind(small_videos, dim = 1)
-                     
-        # CONSIDER wrapping more things here instead of down there
-        
-        stactions = np.concatenate([states, actions], axis = 2)
         # Spatial tiling of state and action, as described on p.5
         tiled = []
         for b in range(BATCH_SIZE):
@@ -154,24 +138,42 @@ class Trainer:
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
 
-        loss = 0
-        
-        self.optimizer.zero_grad()
-        self.state_predict_optimizer.zero_grad()
-
-        state_prediction_loss = 0
-        
+        ans = []
         for t in range(TRAIN_LEN - 1):
             masks, kernels, hidden, cell = self.rnn(Variable(videos[t]), Variable(tiled[t]), hidden, cell)
 
             transformed_images = Trainer.apply_kernels(Variable(videos[t]), kernels)
 
             predictions = Trainer.expected_pixel(transformed_images, masks)
+            ans.append(predictions)
+        return ans
+    
+    def train(self):
+        self.epoch += 1
+        videos, states, actions = self.sess.run(self.data_getter)
 
-            loss += self.loss_fn(predictions, Variable(videos[t + 1], requires_grad = False))
+        
+        small_videos = Trainer.normalize_and_downsample(videos)
+        del videos
+        # Each frame will now be processed separately
+        videos = torch.unbind(small_videos, dim = 1)
+        
+        stactions = np.concatenate([states, actions], axis = 2)
+        
+        loss = 0
+        
+        self.optimizer.zero_grad()
+        self.state_predict_optimizer.zero_grad()
+
+        state_prediction_loss = 0
+
+        
+        predictions = self.make_predictions(videos, stactions)
+        for t in range(TRAIN_LEN - 1):
+            loss += self.loss_fn(predictions[t], Variable(videos[t + 1], requires_grad = False))
             
-            predicted_state = self.state_predictor(wrap(stactions[:, t, :]))
-            state_prediction_loss += self.loss_fn(predicted_state, wrap(states[:, t + 1, :]))
+            predicted_state = self.state_predictor(Variable(torch.FloatTensor(stactions[:, t, :])))
+            state_prediction_loss += self.loss_fn(predicted_state, Variable(torch.FloatTensor(states[:, t + 1, :])))
 
         loss.backward()
         state_prediction_loss.backward()
