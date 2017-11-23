@@ -61,20 +61,10 @@ class CDNA(nn.Module):
     def forward(self, img, tiled, hiddens, cells):
         # input is preprocessed with numpy (at least for now)
         layer0 = self.conv1(img)
-        #print("layer0")
-        #print(layer0.size())
         hidden1, cell1 = self.lstm1(layer0, hiddens[1], cells[1])
-        
-        #print("hidden1")
-        #print(hidden1.size())
         hidden2, cell2 = self.lstm2(hidden1, hiddens[2], cells[2])
         hidden3, cell3 = self.lstm3(self.downsample23(hidden2), hiddens[3], cells[3])
         hidden4, cell4 = self.lstm4(hidden3, hiddens[4], cells[4])
-
-        #print("hidden2")
-        #print(hidden2.size())
-        #print("hidden3")
-        #print(hidden3.size())
         
         input5 = torch.cat((self.downsample45(hidden4), tiled), 1)
         hidden5, cell5 = self.lstm5(input5, hiddens[5], cells[5])
@@ -86,27 +76,11 @@ class CDNA(nn.Module):
         # We will wait to transform the images until we compute the loss.
 
         hidden6, cell6 = self.lstm6(self.upsample56(hidden5), hiddens[6], cells[6])
-
-        #print("hidden4")
-        #print(hidden4.size())
-        #print("hidden5")
-        #print(hidden5.size())
-        #print("hidden6")
-        #print(hidden6.size())
         input7 = self.upsample67(torch.cat((hidden6, hidden3), 1))
-        #print("input7")
-        #print(input7.size())
         hidden7, cell7 = self.lstm7(input7, hiddens[7], cells[7])
 
         input_out = self.last_upsample(torch.cat((hidden7, hidden1), 1))
         out = self.softmax(self.conv2(input_out)) # channel softmax
-
-        
-        
-        #print("hidden7")
-        #print(hidden7.size())
-        #print("out")
-        #print(out.size())
 
         return out, normalized_kernels, [None, hidden1, hidden2, hidden3, hidden4, hidden5, hidden6, hidden7],\
             [None, cell1, cell2, cell3, cell4, cell5, cell6, cell7]
@@ -147,13 +121,14 @@ class CDNA(nn.Module):
 if __name__ == '__main__':
 
     # A test for a tricky part of the code
-    qe = Variable(torch.FloatTensor(np.random.randn(11, 10, 25, 1)))
-    ans1 = qe.view([-1, 10, 5, 5])
+    qe = Variable(torch.FloatTensor(np.random.randn(11, 25, 10, 1)))
+    qe = torch.transpose(qe, 1, 2)
+    ans1 = qe.contiguous().view([-1, 10, 5, 5])
     ans2 = torch.stack(torch.split(torch.squeeze(qe), 5, dim = 2), dim = -2)
     print(type(ans1))
     print(type(ans2))
     print(F.mse_loss(ans1, ans2))
-    #exit(0)
+    #exit(0) # Experiments show that ans2 is slightly faster to compute
 
 
     
