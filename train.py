@@ -18,7 +18,7 @@ class Trainer:
         self.state_predictor = state_predictor
         print("Preparing to get data from tfrecord.")
         self.data_getter = build_image_input()
-        # self.test_data = build_image_input(train = False, novel = False) # Eventually, we'll want this to be True
+        self.test_data = build_image_input(train = False, novel = False) # Eventually, we'll want this to be True
         sess = tf.InteractiveSession()
         tf.train.start_queue_runners(sess)
         sess.run(tf.global_variables_initializer())
@@ -140,7 +140,7 @@ class Trainer:
         cell = self.rnn.initCell(BATCH_SIZE)
 
         ans = []
-        for t in range(TRAIN_LEN - 1 if training else 20):
+        for t in range(TRAIN_LEN - 1 if training else TRAIN_LEN - 1): # TODO: Should be a 20
             # If testing, give it only 2 frames to work with
             video_input = videos[t] if training or t <= 1 else ans[-1].data
             masks, kernels, hidden, cell = self.rnn(Variable(video_input), Variable(tiled[t]), hidden, cell)
@@ -183,7 +183,7 @@ class Trainer:
         state_prediction_loss.backward()
         self.optimizer.step()
         self.state_predict_optimizer.step()
-        self.writer.add_scalar('loss', loss, self.epoch)
+        self.writer.add_scalar('loss', loss.data.numpy(), self.epoch)
         return loss
 
     def test(self):
@@ -207,7 +207,8 @@ class Trainer:
         predictions = torch.unbind(predictions, dim = 0)
 
         for b in range(BATCH_SIZE):
-            seq = vutils.make_grid(predictions[b] + 0.5)
+            # send it to range (0,1)
+            seq = vutils.make_grid(predictions[b].data + 0.5)
             self.writer.add_image('test ' + str(b), seq, self.epoch)
         return
 
@@ -253,5 +254,5 @@ if __name__ == '__main__' and not run_tests:
     for i in range(200):
         print("HELLO!")
         print(trainer.train())
-        if trainer.epoch % 10 == 0:
+        if trainer.epoch % 10 == 1:
             trainer.test()
