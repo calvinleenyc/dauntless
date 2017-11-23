@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
+import torchvision.utils as vutils
 
 from grab_train_images import build_image_input, BATCH_SIZE, TRAIN_LEN
 from model import CDNA
@@ -26,7 +27,7 @@ class Trainer:
         self.loss_fn = nn.MSELoss()
         self.optimizer = torch.optim.Adam(rnn.parameters(), lr = lr_rate)
         self.state_predict_optimizer = torch.optim.Adam(state_predictor.parameters(), lr = lr_rate)
-        #self.writer = SummaryWriter()
+        self.writer = SummaryWriter()
         self.epoch = 0
 
     @staticmethod
@@ -116,7 +117,7 @@ class Trainer:
                             ans[b][c][i][j] += options.data[b, q, c, i, j] * masks.data[b, q, i, j]
         return ans
 
-    def make_predictions(self, videos, stactions):
+    def make_predictions(self, videos, stactions, training):
         # NOTE: The variable [videos] has already been unbound in dimension 1.
         
         # Spatial tiling of state and action, as described on p.5
@@ -139,8 +140,10 @@ class Trainer:
         cell = self.rnn.initCell(BATCH_SIZE)
 
         ans = []
-        for t in range(TRAIN_LEN - 1):
-            masks, kernels, hidden, cell = self.rnn(Variable(videos[t]), Variable(tiled[t]), hidden, cell)
+        for t in range(TRAIN_LEN - 1 if training else 20):
+            # If testing, give it only 2 frames to work with
+            video_input = videos[t] if training or t <= 1 else ans[-1].data
+            masks, kernels, hidden, cell = self.rnn(Variable(video_input), Variable(tiled[t]), hidden, cell)
 
             transformed_images = Trainer.apply_kernels(Variable(videos[t]), kernels)
 
@@ -168,7 +171,8 @@ class Trainer:
         state_prediction_loss = 0
 
         
-        predictions = self.make_predictions(videos, stactions)
+        predictions = self.make_predictions(videos, stactions, training = True)
+        
         for t in range(TRAIN_LEN - 1):
             loss += self.loss_fn(predictions[t], Variable(videos[t + 1], requires_grad = False))
             
@@ -179,13 +183,16 @@ class Trainer:
         state_prediction_loss.backward()
         self.optimizer.step()
         self.state_predict_optimizer.step()
+        self.writer.add_scalar('loss', loss, self.epoch)
         return loss
 
     def test(self):
         videos, states, actions = self.sess.run(self.test_data)
-
+        assert(np.shape(states)[1] == 20) # TEST_LEN
+        
         # p.5: We only get the agent's internal state at the beginning.
         # For the rest, we must predict it.
+        # TODO: Replace all but the first element of [states] with our predictions.
         
         small_videos = Trainer.normalize_and_downsample(videos)
         del videos
@@ -193,11 +200,16 @@ class Trainer:
         videos = torch.unbind(small_videos, dim = 1)
         
         stactions = np.concatenate([states, actions], axis = 2)
-
-        predictions = self.make_predictions(videos, stactions)
         
-        return
+        predictions = self.make_predictions(videos, stactions, training = False)
+        predictions = torch.stack(predictions, dim = 1)
 
+        predictions = torch.unbind(predictions, dim = 0)
+
+        for b in range(BATCH_SIZE):
+            seq = vutils.make_grid(predictions[b] + 0.5)
+            self.writer.add_image('test ' + str(b), seq, self.epoch)
+        return
 
 run_tests = False
 if run_tests:
@@ -241,3 +253,5 @@ if __name__ == '__main__' and not run_tests:
     for i in range(200):
         print("HELLO!")
         print(trainer.train())
+        if trainer.epoch % 10 == 0:
+            trainer.test()
