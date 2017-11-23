@@ -215,16 +215,6 @@ if run_tests:
         diff = F.mse_loss(ans, ans2)
         print(diff)
 
-    run_apply_kernels = False
-    if run_apply_kernels or run_all:
-        imgs = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 3, 64, 64)))
-        kernels = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 10, 5, 5)))
-        ans = Trainer.apply_kernels(imgs, kernels)
-        ans2 = Trainer.old_apply_kernels(imgs, kernels)
-        print(ans.size())
-        diff = F.mse_loss(ans, ans2)
-        print(diff)
-
     run_expected_pixel = True
     if run_expected_pixel or run_all:
         options = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 11, 3, 64, 64)))
