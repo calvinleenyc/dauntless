@@ -65,13 +65,15 @@ class Trainer:
         # output is a list of length BATCH_SIZE with arrays with size (11, 3, 64, 64)
         
         ans = []
+        imgs = torch.unbind(imgs, dim = 0)
         kernels = torch.unbind(kernels, dim = 0)
+        bg = torch.unbind(bg, dim = 0)
         for b in range(BATCH_SIZE):
             # We pretend that the batch is the 3 input channels.
-            transformed_images = F.conv2d(torch.unsqueeze(imgs[b, :, :, :], dim = 1), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
+            transformed_images = F.conv2d(torch.unsqueeze(imgs[b], dim = 1), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
             transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
             # append static background
-            transformed_images = torch.cat((transformed_images, torch.unsqueeze(bg[b, :, :, :], dim = 0)), 0) # 11 x 3 x 64 x 64
+            transformed_images = torch.cat((transformed_images, torch.unsqueeze(bg[b], dim = 0)), 0) # 11 x 3 x 64 x 64
             ans.append(transformed_images)
         return ans
 
@@ -109,7 +111,7 @@ class Trainer:
         tiled = []
         for b in range(BATCH_SIZE):
             this_batch = []
-            for t in range(TRAIN_LEN):
+            for t in range(np.shape(stactions)[1]):
                 spatial_tiling = np.tile(stactions[b, t, :], (8, 8, 1))
                 assert(np.shape(spatial_tiling) == (8, 8, 10))
                 spatial_tiling = np.transpose(spatial_tiling)
@@ -125,8 +127,9 @@ class Trainer:
         cell = self.rnn.initCell(BATCH_SIZE)
 
         ans = []
-        for t in range(TRAIN_LEN - 1 if training else TRAIN_LEN - 1): # TODO: Should be a 20
+        for t in range(TRAIN_LEN - 1 if training else 5): # TODO: Should be a 20
             # If testing, give it only 2 frames to work with
+            # Can also insert scheduled sampling here pretty easily, if desired
             video_input = videos[t] if training or t <= 1 else ans[-1].data
             masks, kernels, hidden, cell = self.rnn(Variable(video_input), Variable(tiled[t]), hidden, cell)
 
@@ -139,7 +142,6 @@ class Trainer:
     def train(self):
         self.epoch += 1
         bg, videos, states, actions = self.sess.run(self.data_getter)
-    
         small_videos = Trainer.normalize_and_downsample(videos)
         
         # bg has size (BATCH_SIZE, 1, 512, 640, 3)
@@ -165,14 +167,17 @@ class Trainer:
             loss += self.loss_fn(predictions[t], Variable(videos[t + 1], requires_grad = False))
             
             predicted_state = self.state_predictor(Variable(torch.FloatTensor(stactions[:, t, :])))
-            state_prediction_loss += self.loss_fn(predicted_state, Variable(torch.FloatTensor(states[:, t + 1, :])))
+
+            state_prediction_loss += self.loss_fn(predicted_state, Variable(torch.FloatTensor(states[:, t + 1, :]), requires_grad = False))
 
         loss.backward()
         state_prediction_loss.backward()
         self.optimizer.step()
         self.state_predict_optimizer.step()
+        self.writer.add_scalar('state_prediction_loss', state_prediction_loss.data.numpy(), self.epoch)
         self.writer.add_scalar('loss', loss.data.numpy(), self.epoch)
         self.writer.add_scalar('log_loss', np.log(loss.data.numpy()), self.epoch)
+        print(state_prediction_loss)
         return loss
 
     def test(self):
@@ -186,7 +191,12 @@ class Trainer:
         
         # p.5: We only get the agent's internal state at the beginning.
         # For the rest, we must predict it.
-        # TODO: Replace all but the first element of [states] with our predictions.
+        predicted_states = [states[:, 0, :]]
+        for i in range(1, np.shape(states)[1]):
+            prev_staction = np.concatenate((predicted_states[i-1], actions[:, i-1, :]), axis = 1)
+            next_state = self.state_predictor(Variable(torch.FloatTensor(prev_staction))).data.numpy()
+            predicted_states.append(next_state)
+        states = np.stack(predicted_states, axis = 1)
     
         # Each frame will now be processed separately
         videos = torch.unbind(small_videos, dim = 1)
@@ -200,7 +210,7 @@ class Trainer:
 
         for b in range(BATCH_SIZE):
             # send it to range (0,1)
-            seq = vutils.make_grid(predictions[b].data + 0.5)
+            seq = vutils.make_grid(predictions[b].data + 0.5, nrow = 1)
             self.writer.add_image('test ' + str(b), seq, self.epoch)
         return
 
