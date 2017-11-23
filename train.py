@@ -59,22 +59,7 @@ class Trainer:
         return torch.FloatTensor(ans) / 256 - 0.5
 
     @staticmethod
-    def old_apply_kernels(imgs, kernels):
-        # imgs has size (BATCH_SIZE, 3, 64, 64)
-        # kernels has size (BATCH_SIZE, 10, 5, 5)
-        # output has size (BATCH_SIZE, 11, 3, 64, 64)
-        ans = []
-        for b in range(BATCH_SIZE):
-            # We pretend that the batch is the 3 input channels.
-            transformed_images = F.conv2d(imgs[b, :, :, :].view([3, 1, 64, 64]), kernels[b].view([10, 1, 5, 5]), padding = 2) # 3 x 10 x 64 x 64
-            transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
-            # append original # TODO: Replace this with STATIC BACKGROUND
-            transformed_images = torch.cat((transformed_images, imgs[b, :, :, :].view([1, 3, 64, 64])), 0) # 11 x 3 x 64 x 64
-            ans.append(transformed_images)
-        return torch.stack(ans)
-
-    @staticmethod
-    def apply_kernels(imgs, kernels):
+    def apply_kernels(bg, imgs, kernels):
         # imgs has size (BATCH_SIZE, 3, 64, 64)
         # kernels has size (BATCH_SIZE, 10, 5, 5)
         # output is a list of length BATCH_SIZE with arrays with size (11, 3, 64, 64)
@@ -85,8 +70,8 @@ class Trainer:
             # We pretend that the batch is the 3 input channels.
             transformed_images = F.conv2d(torch.unsqueeze(imgs[b, :, :, :], dim = 1), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
             transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
-            # append original # TODO: Replace this with STATIC BACKGROUND
-            transformed_images = torch.cat((transformed_images, torch.unsqueeze(imgs[b, :, :, :], dim = 0)), 0) # 11 x 3 x 64 x 64
+            # append static background
+            transformed_images = torch.cat((transformed_images, torch.unsqueeze(bg[b, :, :, :], dim = 0)), 0) # 11 x 3 x 64 x 64
             ans.append(transformed_images)
         return ans
 
@@ -117,7 +102,7 @@ class Trainer:
                             ans[b][c][i][j] += options.data[b, q, c, i, j] * masks.data[b, q, i, j]
         return ans
 
-    def make_predictions(self, videos, stactions, training):
+    def make_predictions(self, bg, videos, stactions, training):
         # NOTE: The variable [videos] has already been unbound in dimension 1.
         
         # Spatial tiling of state and action, as described on p.5
@@ -145,7 +130,7 @@ class Trainer:
             video_input = videos[t] if training or t <= 1 else ans[-1].data
             masks, kernels, hidden, cell = self.rnn(Variable(video_input), Variable(tiled[t]), hidden, cell)
 
-            transformed_images = Trainer.apply_kernels(Variable(videos[t]), kernels)
+            transformed_images = Trainer.apply_kernels(Variable(bg), Variable(videos[t]), kernels)
 
             predictions = Trainer.expected_pixel(transformed_images, masks)
             ans.append(predictions)
@@ -156,7 +141,9 @@ class Trainer:
         bg, videos, states, actions = self.sess.run(self.data_getter)
     
         small_videos = Trainer.normalize_and_downsample(videos)
-        small_bg = Trainer.normalize_and_downsample(bg) # "abuse of notation"
+        
+        # bg has size (BATCH_SIZE, 1, 512, 640, 3)
+        small_bg = torch.squeeze(Trainer.normalize_and_downsample(bg)) # "abuse of notation"
         del videos
         del bg
         # Each frame will now be processed separately
@@ -172,7 +159,7 @@ class Trainer:
         state_prediction_loss = 0
 
         
-        predictions = self.make_predictions(videos, stactions, training = True)
+        predictions = self.make_predictions(small_bg, videos, stactions, training = True)
         
         for t in range(TRAIN_LEN - 1):
             loss += self.loss_fn(predictions[t], Variable(videos[t + 1], requires_grad = False))
@@ -193,7 +180,7 @@ class Trainer:
         assert(np.shape(states)[1] == 20) # TEST_LEN
 
         small_videos = Trainer.normalize_and_downsample(videos)
-        small_bg = Trainer.normalize_and_downsample(bg) # "abuse of notation"
+        small_bg = torch.squeeze(Trainer.normalize_and_downsample(bg)) # "abuse of notation"
         del videos
         del bg
         
@@ -206,7 +193,7 @@ class Trainer:
         
         stactions = np.concatenate([states, actions], axis = 2)
         
-        predictions = self.make_predictions(videos, stactions, training = False)
+        predictions = self.make_predictions(small_bg, videos, stactions, training = False)
         predictions = torch.stack(predictions, dim = 1)
 
         predictions = torch.unbind(predictions, dim = 0)
