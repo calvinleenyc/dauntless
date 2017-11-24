@@ -1,3 +1,5 @@
+#### HELPER CODE PROVIDED FOR DEALING WITH IMAGE DATA
+
 """Code for building the input for the prediction model."""
 
 import os
@@ -15,7 +17,15 @@ FLAGS = flags.FLAGS
 ORIGINAL_WIDTH = 640
 ORIGINAL_HEIGHT = 512
 COLOR_CHAN = 3
-BATCH_SIZE = 25
+BATCH_SIZE = 6
+
+
+# On p.6: We train for 8 future time steps.
+# (so 9 total)
+TRAIN_LEN = 9
+
+# We show 2 frames, then ask it to predict the next 18.
+TEST_LEN = 20
 
 def build_image_input(train=True, novel=True):
   """Create input tfrecord tensors.
@@ -42,10 +52,26 @@ def build_image_input(train=True, novel=True):
   _, serialized_example = reader.read(filename_queue)
 
   image_seq = []
+  state_seq = []
+  action_seq = []
 
-  for i in range(25):
+  background_name = 'pre/image/encoded'
+  features = {background_name: tf.FixedLenFeature([1], tf.string)}
+  features = tf.parse_single_example(serialized_example, features = features)
+  image_buffer = tf.reshape(features[background_name], shape=[])
+  bg_image = tf.image.decode_jpeg(image_buffer, channels = COLOR_CHAN)
+  bg_image.set_shape([ORIGINAL_HEIGHT, ORIGINAL_WIDTH, COLOR_CHAN])
+  bg_image = tf.reshape(bg_image, [1, ORIGINAL_HEIGHT, ORIGINAL_WIDTH, COLOR_CHAN])
+  
+  for i in range(TRAIN_LEN if train else TEST_LEN):
     image_name = 'move/' + str(i) + '/image/encoded'
-    features = {image_name: tf.FixedLenFeature([1], tf.string)}
+    state_name = 'move/' + str(i) + '/endeffector/vec_pitch_yaw'
+    action_name = 'move/' + str(i) + '/commanded_pose/vec_pitch_yaw'
+    
+    features = {image_name: tf.FixedLenFeature([1], tf.string),
+                state_name: tf.FixedLenFeature([5], tf.float32),
+                action_name: tf.FixedLenFeature([5], tf.float32)
+    }
     features = tf.parse_single_example(serialized_example, features=features)
 
     image_buffer = tf.reshape(features[image_name], shape=[])
@@ -55,28 +81,32 @@ def build_image_input(train=True, novel=True):
     image = tf.reshape(image, [1, ORIGINAL_HEIGHT, ORIGINAL_WIDTH, COLOR_CHAN])
     # image = tf.image.resize_bicubic(image, [IMG_HEIGHT, IMG_WIDTH])
     image_seq.append(image)
+    state_seq.append(features[state_name])
+    action_seq.append(features[action_name])
 
-  image_seq = tf.concat(0, image_seq)
+  image_seq = tf.concat(image_seq, 0)
+  
 
 
   image_batch = tf.train.batch(
-      [image_seq],
+      [bg_image, image_seq, state_seq, action_seq],
       BATCH_SIZE,
       num_threads=1,
       capacity=1)
   return image_batch
 
-import moviepy.editor as mpy
+#import moviepy.editor as mpy
 def npy_to_gif(npy, filename):
     clip = mpy.ImageSequenceClip(list(npy), fps=10)
     clip.write_gif(filename)
 
-train_image_tensor = build_image_input()
-sess = tf.InteractiveSession()
-tf.train.start_queue_runners(sess)
-sess.run(tf.initialize_all_variables())
-train_videos = sess.run(train_image_tensor)
+if __name__ == '__main__':
+    train_image_tensor = build_image_input()
+    sess = tf.InteractiveSession()
+    tf.train.start_queue_runners(sess)
+    sess.run(tf.initialize_all_variables())
+    train_videos = sess.run(train_image_tensor)
 
-for i in range(BATCH_SIZE):
-    video = train_videos[i]
-    npy_to_gif(video, '~/train_' + str(i) + '.gif')
+    for i in range(BATCH_SIZE):
+        video = train_videos[i]
+        npy_to_gif(video, '~/train_' + str(i) + '.gif')

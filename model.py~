@@ -29,10 +29,10 @@ class ConvLSTM(nn.Module):
         return H, C
 
     def initHidden(self, batch_size):
-        return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side).cuda())
+        return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side))
 
     def initCell(self, batch_size):
-        return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side).cuda())
+        return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side))
 
 class CDNA(nn.Module):
     def __init__(self):

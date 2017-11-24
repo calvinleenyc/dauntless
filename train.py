@@ -39,7 +39,7 @@ class Trainer:
 
         videos = torch.FloatTensor(videos)
         videos = F.avg_pool3d(videos, (1, 8, 10)).data
-        return videos / 256 - 0.5
+        return (videos / 256 - 0.5).cuda()
 
     @staticmethod
     def slow_normalize_and_downsample(videos):
@@ -119,7 +119,7 @@ class Trainer:
             tiled.append(this_batch)
         tiled = np.array(tiled) # maybe np.stack
 
-        tiled = torch.FloatTensor(tiled)
+        tiled = torch.FloatTensor(tiled).cuda()
         # Each frame will now be processed separately
         tiled = torch.unbind(tiled, dim = 1)
         
@@ -127,7 +127,7 @@ class Trainer:
         cell = self.rnn.initCell(BATCH_SIZE)
 
         ans = []
-        for t in range(TRAIN_LEN - 1 if training else 5): # TODO: Should be a 20
+        for t in range(TRAIN_LEN - 1 if training else 18): # TODO: Should be a 20
             # If testing, give it only 2 frames to work with
             # Can also insert scheduled sampling here pretty easily, if desired
             video_input = videos[t] if training or t <= 1 else ans[-1].data
@@ -173,9 +173,9 @@ class Trainer:
         state_prediction_loss.backward()
         self.optimizer.step()
         self.state_predict_optimizer.step()
-        self.writer.add_scalar('state_prediction_loss', state_prediction_loss.data.numpy(), self.epoch)
-        self.writer.add_scalar('loss', loss.data.numpy(), self.epoch)
-        self.writer.add_scalar('log_loss', np.log(loss.data.numpy()), self.epoch)
+        self.writer.add_scalar('state_prediction_loss', state_prediction_loss.data.cpu().numpy(), self.epoch)
+        self.writer.add_scalar('loss', loss.data.cpu().numpy(), self.epoch)
+        self.writer.add_scalar('log_loss', np.log(loss.data.cpu().numpy()), self.epoch)
         return loss
 
     def test(self):
@@ -236,14 +236,14 @@ if run_tests:
     
     
 if __name__ == '__main__' and not run_tests:
-    rnn = CDNA()
+    rnn = CDNA().cuda()
     # On page 11: "The next state is predicted linearly from the current state and action."
     state_predictor = nn.Linear(10, 5)
     trainer = Trainer(rnn, state_predictor)
 
     
-    for i in range(200):
-        print("HELLO!")
-        print(trainer.train())
-        if trainer.epoch % 10 == 1:
+    while True:
+        #print("HELLO!")
+        trainer.train()
+        if trainer.epoch % 50 == 1:
             trainer.test()
