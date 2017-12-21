@@ -4,6 +4,9 @@ import numpy as np
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+from grab_train_images import build_image_input, BATCH_SIZE, TRAIN_LEN
+
+
 class ConvLSTM(nn.Module):
     def __init__(self, sq_side, input_ch, hidden_ch, use_cuda):
         super(ConvLSTM, self).__init__()
@@ -120,7 +123,7 @@ class CDNA(nn.Module):
         input_out = self.last_upsample(torch.cat((hidden7, hidden1), 1))
         masks = self.softmax(self.conv2(input_out)) # channel softmax
 
-        transformed_images = apply_kernels(bg, img, kernels)
+        transformed_images = apply_kernels(bg, img, normalized_kernels)
 
         return expected_pixel(transformed_images, masks), [None, hidden1, hidden2, hidden3, hidden4, hidden5, hidden6, hidden7],\
             [None, cell1, cell2, cell3, cell4, cell5, cell6, cell7]

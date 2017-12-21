@@ -32,8 +32,7 @@ class Trainer:
         self.writer = SummaryWriter()
         self.epoch = 0
 
-    @staticmethod
-    def normalize_and_downsample(videos):
+    def normalize_and_downsample(self, videos):
         # videos.size() = -1 x TRAIN_LEN x 512 x 640 x 3
         videos = np.array(videos, dtype = np.float32)
         # Need to rearrange [videos], so that channel comes before height, width
@@ -83,10 +82,10 @@ class Trainer:
     def train(self):
         self.epoch += 1
         bg, videos, states, actions = self.sess.run(self.data_getter)
-        small_videos = Trainer.normalize_and_downsample(videos)
+        small_videos = self.normalize_and_downsample(videos)
         
         # bg has size (BATCH_SIZE, 1, 512, 640, 3)
-        small_bg = torch.squeeze(Trainer.normalize_and_downsample(bg))
+        small_bg = torch.squeeze(self.normalize_and_downsample(bg))
         del videos
         del bg
         # Each frame will now be processed separately
@@ -123,8 +122,8 @@ class Trainer:
         bg, videos, states, actions = self.sess.run(self.test_data)
         assert(np.shape(states)[1] == 20) # TEST_LEN
 
-        small_videos = Trainer.normalize_and_downsample(videos)
-        small_bg = torch.squeeze(Trainer.normalize_and_downsample(bg)) # "abuse of notation"
+        small_videos = self.normalize_and_downsample(videos)
+        small_bg = torch.squeeze(self.normalize_and_downsample(bg)) # "abuse of notation"
         del videos
         del bg
         
@@ -170,7 +169,7 @@ if __name__ == '__main__':
         rnn = CDNA(use_cuda = False)
         state_predictor = nn.Linear(10, 5)
         
-    trainer = Trainer(rnn, state_predictor, use_cuda)
+    trainer = Trainer(rnn, state_predictor, args.cuda)
 
     
     while True:
