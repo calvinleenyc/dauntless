@@ -42,23 +42,6 @@ class Trainer:
         return (videos / 256 - 0.5).cuda()
 
     @staticmethod
-    def slow_normalize_and_downsample(videos):
-        videos = np.array(videos, dtype = np.float32)
-        # Need to rearrange [videos], so that channel comes before height, width
-        videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
-
-        ans = np.zeros([BATCH_SIZE, TRAIN_LEN, 3, 64, 64])
-        for b in range(BATCH_SIZE):
-            for t in range(TRAIN_LEN):
-                for c in range(3):
-                    for i in range(64):
-                        for j in range(64):
-                            ans[b,t,c,i,j] = np.max([[videos[b, t, c, i * 8 + di, j * 10 + dj] for di in range(8)] for dj in range(10)])
-                            
-        ans = np.array(ans, dtype = np.float32)
-        return torch.FloatTensor(ans) / 256 - 0.5
-
-    @staticmethod
     def apply_kernels(bg, imgs, kernels):
         # imgs has size (BATCH_SIZE, 3, 64, 64)
         # kernels has size (BATCH_SIZE, 10, 5, 5)
@@ -91,18 +74,6 @@ class Trainer:
                 here.append(prediction)
             ans.append(torch.stack(here))
         return torch.stack(ans)
-
-    @staticmethod
-    def slow_expected_pixel(options, masks):
-        ans = torch.zeros(BATCH_SIZE, 3, 64, 64)
-        
-        for b in range(BATCH_SIZE):
-            for c in range(3):
-                for i in range(64):
-                    for j in range(64):
-                        for q in range(11):
-                            ans[b][c][i][j] += options.data[b, q, c, i, j] * masks.data[b, q, i, j]
-        return ans
 
     def make_predictions(self, bg, videos, stactions, training):
         # NOTE: The variable [videos] has already been unbound in dimension 1, i.e. videos[t] has size BATCH_SIZE x 3 x 64 x 64.
@@ -163,11 +134,11 @@ class Trainer:
         predictions = self.make_predictions(small_bg, videos, stactions, training = True)
         
         for t in range(TRAIN_LEN - 1):
-            loss += self.loss_fn(predictions[t], Variable(videos[t + 1], requires_grad = False))
+            loss += self.loss_fn(predictions[t], Variable(videos[t + 1]))
             
             predicted_state = self.state_predictor(Variable(torch.FloatTensor(stactions[:, t, :])))
 
-            state_prediction_loss += self.loss_fn(predicted_state, Variable(torch.FloatTensor(states[:, t + 1, :]), requires_grad = False))
+            state_prediction_loss += self.loss_fn(predicted_state, Variable(torch.FloatTensor(states[:, t + 1, :])))
 
         loss.backward()
         state_prediction_loss.backward()
@@ -212,28 +183,6 @@ class Trainer:
             seq = vutils.make_grid(predictions[b].data + 0.5, nrow = 1)
             self.writer.add_image('test ' + str(b), seq, self.epoch)
         return
-
-run_tests = False
-if run_tests:
-    run_all = False
-    run_n_and_d = False
-    if run_n_and_d or run_all:
-        videos = np.random.randn(BATCH_SIZE,TRAIN_LEN,512,640,3)
-        ans = Trainer.normalize_and_downsample(videos)
-        ans2 = Trainer.slow_normalize_and_downsample(videos)
-        diff = F.mse_loss(ans, ans2)
-        print(diff)
-
-    run_expected_pixel = True
-    if run_expected_pixel or run_all:
-        options = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 11, 3, 64, 64)))
-        masks = Variable(torch.FloatTensor(np.random.randn(BATCH_SIZE, 11, 64, 64)))
-        ans = Trainer.expected_pixel(options, masks)
-        ans2 = Trainer.slow_expected_pixel(options, masks)
-        diff = F.mse_loss(ans, ans2)
-        print(diff)
-        print(ans.size())
-    
     
 if __name__ == '__main__' and not run_tests:
     rnn = CDNA().cuda()
@@ -243,7 +192,6 @@ if __name__ == '__main__' and not run_tests:
 
     
     while True:
-        #print("HELLO!")
         trainer.train()
         if trainer.epoch % 50 == 1:
             trainer.test()
