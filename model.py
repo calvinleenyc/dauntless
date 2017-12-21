@@ -4,8 +4,6 @@ import numpy as np
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-lr_rate = 0.001
-
 KERNEL_SIZE = 5
 
 class ConvLSTM(nn.Module):
@@ -107,61 +105,3 @@ class CDNA(nn.Module):
                 self.lstm6.initCell(batch_size),
                 self.lstm7.initCell(batch_size),
         ]
-
-    def num_params(self):
-        ans = 0
-        for param in self.parameters():
-            sz = param.size()
-            here = 1
-            for dim in range(len(sz)):
-                here *= sz[dim]
-            ans += here
-        return ans
-
-if __name__ == '__main__':
-
-    # A test for a tricky part of the code
-    qe = Variable(torch.FloatTensor(np.random.randn(11, 25, 10, 1)))
-    qe = torch.transpose(qe, 1, 2)
-    ans1 = qe.contiguous().view([-1, 10, 5, 5])
-    ans2 = torch.stack(torch.split(torch.squeeze(qe), 5, dim = 2), dim = -2)
-    print(type(ans1))
-    print(type(ans2))
-    print(F.mse_loss(ans1, ans2))
-    #exit(0) # Experiments show that ans2 is slightly faster to compute
-
-
-    
-    rnn = CDNA()
-    
-    print(rnn.num_params())
-
-    img = np.zeros([3, 64, 64])
-    tiled = np.zeros([10, 8, 8])
-
-    img = Variable(torch.FloatTensor([img, img, img, img]))
-    tiled = Variable(torch.FloatTensor([tiled, tiled, tiled, tiled]))
-
-    hidden = rnn.initHidden(4)
-    cell = rnn.initCell(4)
-
-    q = rnn(img, tiled, hidden, cell)
-    print(q[0])
-    print(q[1])
-
-    qq = q[1].data.numpy()
-    print(np.sum(qq[2,4,:,:]))
-
-    qqq = q[0].data.numpy()
-    print(np.sum(qqq[2,:,2,3]))
-
-    loss_fn = nn.MSELoss()
-
-    print(q[0][0][0][0][0])
-    loss = q[0][0][0][0][0]
-    print(loss)
-    loss.backward()
-
-    optim = torch.optim.Adam(rnn.parameters(), lr = 0.001)
-    optim.step()
-    print(rnn.num_params()) # Concerning: should be 12.6M...?  Maybe the CDNA is special?
