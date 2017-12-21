@@ -61,8 +61,6 @@ class Trainer:
             tiled = Variable(torch.cuda.FloatTensor(tiled))
         else:
             tiled = Variable(torch.FloatTensor(tiled))
-        # Each frame will now be processed separately
-        tiled = torch.unbind(tiled, dim = 1)
         return tiled
     
     def make_batch(self, test = False):
@@ -81,10 +79,13 @@ class Trainer:
 	    states = Variable(torch.FloatTensor(np_states))
 	    actions = Variable(torch.FloatTensor(np_actions))
         
+	tiled = self.spatial_tiling(np.concatenate([np_states, np_actions], axis = 2))
+	
+	# Frames are processed separately
         videos = torch.unbind(small_videos, dim = 1)
 	states = torch.unbind(states, dim = 1)
 	actions = torch.unbind(actions, dim = 1)	
-    
+    	tiled = torch.unbind(tiled, dim = 1)
 
 	# if we're testing, we replace states with predicted states
         if test:
@@ -94,8 +95,8 @@ class Trainer:
                 predicted_states.append(next_state)
             states = predicted_states
 
-        return videos, small_bg, states, actions, \
-		self.spatial_tiling(np.concatenate([np_states, np_actions], axis = 2))
+        return videos, small_bg, states, actions, tiled
+		
     
     def train(self):
         self.epoch += 1
