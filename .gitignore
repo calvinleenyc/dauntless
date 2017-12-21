@@ -1,3 +1,4 @@
 push
 runs
 dauntless.pem
+*.pyc
