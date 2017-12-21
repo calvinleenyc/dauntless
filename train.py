@@ -19,8 +19,8 @@ class Trainer:
         self.state_predictor = state_predictor
         self.use_cuda = use_cuda
         print("Preparing to get data from tfrecord.")
-        #self.data_getter = build_image_input()
-        #self.test_data = build_image_input(train = False, novel = False)
+        self.data_getter = build_image_input()
+        self.test_data = build_image_input(train = False, novel = False)
         sess = tf.InteractiveSession()
         tf.train.start_queue_runners(sess)
         sess.run(tf.global_variables_initializer())
@@ -43,18 +43,33 @@ class Trainer:
             videos = Variable(torch.FloatTensor(videos))
         videos = F.avg_pool3d(videos, (1, 8, 10))
         return videos / 256 - 0.5
+
+    def spatial_tiling(self, stactions):
+        # Compute spatial tiling of state and action, as described on p.5
+        tiled = []
+        for b in range(BATCH_SIZE):
+            this_batch = []
+            for t in range(np.shape(stactions)[1]):
+                spatial_tiling = np.tile(stactions[b, t, :], (8, 8, 1))
+                assert(np.shape(spatial_tiling) == (8, 8, 10))
+                spatial_tiling = np.transpose(spatial_tiling)
+                this_batch.append(spatial_tiling)
+            tiled.append(this_batch)
+        tiled = np.array(tiled) # maybe np.stack
+
+        if self.use_cuda:
+            tiled = Variable(torch.cuda.FloatTensor(tiled))
+        else:
+            tiled = Variable(torch.FloatTensor(tiled))
+        # Each frame will now be processed separately
+        tiled = torch.unbind(tiled, dim = 1)
+        return tiled
     
     def make_batch(self, test = False):
-        #if not test:
-	#    np_bg, np_videos, np_states, np_actions = self.sess.run(self.data_getter)
-        # else:
-	#    np_bg, np_videos, np_state, np_actions = self.sess.run(self.test_data)
-	
-	le = 9 if not test else 20
-	np_bg = np.random.randn(20, 1, 64 * 8, 64 * 10, 3)
-	np_videos = np.random.randn(20, le, 64 * 8, 64 * 10, 3)
-	np_states = np.random.randn(20, le, 5)
-	np_actions = np.random.randn(20, le, 5)
+        if not test:
+	    np_bg, np_videos, np_states, np_actions = self.sess.run(self.data_getter)
+        else:
+	    np_bg, np_videos, np_state, np_actions = self.sess.run(self.test_data)
 	
 	small_videos = self.normalize_and_downsample(np_videos)
         # bg has size (BATCH_SIZE, 1, 512, 640, 3)
@@ -81,30 +96,8 @@ class Trainer:
 
         return videos, small_bg, states, actions, \
 		self.spatial_tiling(np.concatenate([np_states, np_actions], axis = 2))
-
-    def spatial_tiling(self, stactions):
-        # Compute spatial tiling of state and action, as described on p.5
-        tiled = []
-        for b in range(BATCH_SIZE):
-            this_batch = []
-            for t in range(np.shape(stactions)[1]):
-                spatial_tiling = np.tile(stactions[b, t, :], (8, 8, 1))
-                assert(np.shape(spatial_tiling) == (8, 8, 10))
-                spatial_tiling = np.transpose(spatial_tiling)
-                this_batch.append(spatial_tiling)
-            tiled.append(this_batch)
-        tiled = np.array(tiled) # maybe np.stack
-
-        if self.use_cuda:
-            tiled = Variable(torch.cuda.FloatTensor(tiled))
-        else:
-            tiled = Variable(torch.FloatTensor(tiled))
-        # Each frame will now be processed separately
-        tiled = torch.unbind(tiled, dim = 1)
-        return tiled
     
     def train(self):
-	print("train")
         self.epoch += 1
         videos, bg, states, actions, tiled = self.make_batch(test = False)
         loss = 0.0
@@ -132,15 +125,12 @@ class Trainer:
         return loss
 
     def test(self):
-	print("test")
 	videos, bg, states, actions, tiled = self.make_batch(test = True)
         assert(np.shape(states)[1] == 20) # TEST_LEN
-        
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
-        
+	
         predictions = []
-        
         for t in range(18):
             if t <= 1:
                 video_input = videos[t] # allow it to see first two frames
@@ -152,7 +142,6 @@ class Trainer:
         # re-group by original batch
         predictions = torch.stack(predictions, dim = 1)
         predictions = torch.unbind(predictions, dim = 0)
-
         for b in range(BATCH_SIZE):
             # send it to range (0,1)
             seq = vutils.make_grid(predictions[b].data + 0.5, nrow = 1)
