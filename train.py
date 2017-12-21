@@ -53,10 +53,8 @@ class Trainer:
         
         videos = torch.unbind(small_videos, dim = 1)
         return videos, small_bg, states, actions
-
-    def make_predictions(self, bg, videos, stactions, training):
-        # NOTE: The variable [videos] has already been unbound in dimension 1, i.e. videos[t] has size BATCH_SIZE x 3 x 64 x 64.
-        
+    
+    def spatial_tiling(stactions):
         # Compute spatial tiling of state and action, as described on p.5
         tiled = []
         for b in range(BATCH_SIZE):
@@ -75,6 +73,13 @@ class Trainer:
             tiled = Variable(torch.FloatTensor(tiled))
         # Each frame will now be processed separately
         tiled = torch.unbind(tiled, dim = 1)
+        return tiled
+
+    def make_predictions(self, bg, videos, stactions, training):
+        # NOTE: The variable [videos] has already been unbound in dimension 1, i.e. videos[t] has size BATCH_SIZE x 3 x 64 x 64.
+        
+        tiled = spatial_tiling(stactions)
+        
         
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
