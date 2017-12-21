@@ -100,26 +100,26 @@ class CDNA(nn.Module):
         
     def forward(self, bg, img, tiled, hiddens, cells):
         # input is preprocessed with numpy (at least for now)
-        layer0 = self.conv1(img)
-        hidden1, cell1 = self.lstm1(layer0, hiddens[1], cells[1])
-        hidden2, cell2 = self.lstm2(hidden1, hiddens[2], cells[2])
-        hidden3, cell3 = self.lstm3(self.downsample23(hidden2), hiddens[3], cells[3])
-        hidden4, cell4 = self.lstm4(hidden3, hiddens[4], cells[4])
+        # img is (batch_size x )3 x 64 x 64
+        layer0 = self.conv1(img) # 32 x 32 x 32
+        hidden1, cell1 = self.lstm1(layer0, hiddens[1], cells[1]) # hidden1 is 32 x 32 x 32
+        hidden2, cell2 = self.lstm2(hidden1, hiddens[2], cells[2]) # hidden2 is 32 x 32 x 32
+        hidden3, cell3 = self.lstm3(self.downsample23(hidden2), hiddens[3], cells[3]) # hidden3 is 64 x 16 x 16
+        hidden4, cell4 = self.lstm4(hidden3, hiddens[4], cells[4]) # hidden4 is 64 x 16 x 16
         
-        input5 = torch.cat((self.downsample45(hidden4), tiled), 1)
-        hidden5, cell5 = self.lstm5(input5, hiddens[5], cells[5])
+        input5 = torch.cat((self.downsample45(hidden4), tiled), 1) # input5 is 138 x 8 x 8
+        hidden5, cell5 = self.lstm5(input5, hiddens[5], cells[5]) # hidden5 is 138 x 8 x 8
 
         kernels = self.to_kernels(hidden5.view([-1, 138 * 8 * 8])).view([-1, 25, 10, 1])
         # NOT a channel softmax, but a spatial one
         normalized_kernels = torch.transpose(self.softmax(kernels), 1, 2)
         normalized_kernels = torch.stack(torch.split(torch.squeeze(normalized_kernels), 5, dim = 2), dim = -2)
-        # We will wait to transform the images until we compute the loss.
 
-        hidden6, cell6 = self.lstm6(self.upsample56(hidden5), hiddens[6], cells[6])
+        hidden6, cell6 = self.lstm6(self.upsample56(hidden5), hiddens[6], cells[6]) # hidden6 is 64 x 16 x 16
         input7 = self.upsample67(torch.cat((hidden6, hidden3), 1))
-        hidden7, cell7 = self.lstm7(input7, hiddens[7], cells[7])
+        hidden7, cell7 = self.lstm7(input7, hiddens[7], cells[7]) # hidden7 is 32 x 32 x 32
 
-        input_out = self.last_upsample(torch.cat((hidden7, hidden1), 1))
+        input_out = self.last_upsample(torch.cat((hidden7, hidden1), 1)) # input_out is 32 x 64 x 64
         masks = self.softmax(self.conv2(input_out)) # channel softmax
 
         transformed_images = apply_kernels(bg, img, normalized_kernels)
