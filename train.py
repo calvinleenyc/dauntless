@@ -64,6 +64,7 @@ class Trainer:
         return tiled
     
     def make_batch(self, test = False):
+	# note that "bg" stands for "background".
         if not test:
 	    np_bg, np_videos, np_states, np_actions = self.sess.run(self.data_getter)
         else:
