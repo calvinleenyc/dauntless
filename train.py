@@ -56,12 +56,7 @@ class Trainer:
                 this_batch.append(spatial_tiling)
             tiled.append(this_batch)
         tiled = np.array(tiled) # maybe np.stack
-
-        if self.use_cuda:
-            tiled = Variable(torch.cuda.FloatTensor(tiled))
-        else:
-            tiled = Variable(torch.FloatTensor(tiled))
-        return tiled
+	return tiled
     
     def make_batch(self, test = False):
 	# note that "bg" stands for "background".
@@ -73,14 +68,16 @@ class Trainer:
 	small_videos = self.normalize_and_downsample(np_videos)
         # bg has size (BATCH_SIZE, 1, 512, 640, 3)
         small_bg = torch.squeeze(self.normalize_and_downsample(np_bg))
+	tiled = self.spatial_tiling(np.concatenate([np_states, np_actions], axis = 2))
+	
 	if self.use_cuda:
 	    states = Variable(torch.cuda.FloatTensor(np_states))
 	    actions = Variable(torch.cuda.FloatTensor(np_actions))
+	    tiled = Variable(torch.cuda.FloatTensor(tiled))
 	else:
 	    states = Variable(torch.FloatTensor(np_states))
 	    actions = Variable(torch.FloatTensor(np_actions))
-        
-	tiled = self.spatial_tiling(np.concatenate([np_states, np_actions], axis = 2))
+	    tiled = Variable(torch.FloatTensor(tiled))
 	
 	# Frames are processed separately
         videos = torch.unbind(small_videos, dim = 1)
