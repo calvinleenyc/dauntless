@@ -8,6 +8,7 @@ import torchvision.utils as vutils
 
 from grab_train_images import build_image_input, BATCH_SIZE, TRAIN_LEN
 from model import CDNA
+import argparse
 import tensorflow as tf
 
 lr_rate = 0.001
@@ -153,9 +154,14 @@ class Trainer:
             self.writer.add_image('test ' + str(b), seq, self.epoch)
         return
     
-if __name__ == '__main__' and not run_tests:
-    use_cuda = True
-    if use_cuda:
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='CDNA Model Training')
+    parser.add_argument('--disable-cuda', action='store_true',
+                        help='Disable CUDA')
+    args = parser.parse_args()
+    args.cuda = not args.disable_cuda and torch.cuda.is_available()
+
+    if args.cuda:
         rnn = CDNA(use_cuda = True).cuda()
 
         # On page 11: "The next state is predicted linearly from the current state and action."
