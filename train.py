@@ -37,9 +37,9 @@ class Trainer:
         # Need to rearrange [videos], so that channel comes before height, width
         videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
 
-        videos = torch.FloatTensor(videos)
-        videos = F.avg_pool3d(videos, (1, 8, 10)).data
-        return (videos / 256 - 0.5).cuda()
+        videos = Variable(torch.FloatTensor(videos).cuda())
+        videos = F.avg_pool3d(videos, (1, 8, 10))
+        return videos / 256 - 0.5
 
     def make_predictions(self, bg, videos, stactions, training):
         # NOTE: The variable [videos] has already been unbound in dimension 1, i.e. videos[t] has size BATCH_SIZE x 3 x 64 x 64.
@@ -56,7 +56,7 @@ class Trainer:
             tiled.append(this_batch)
         tiled = np.array(tiled) # maybe np.stack
 
-        tiled = torch.FloatTensor(tiled).cuda()
+        tiled = Variable(torch.FloatTensor(tiled).cuda())
         # Each frame will now be processed separately
         tiled = torch.unbind(tiled, dim = 1)
         
@@ -68,7 +68,7 @@ class Trainer:
             # If testing, give it only 2 frames to work with
             # Can also insert scheduled sampling here pretty easily, if desired
             video_input = videos[t] if training or t <= 1 else ans[-1].data
-            predictions, hidden, cell = self.rnn(Variable(bg), Variable(video_input), Variable(tiled[t]), hidden, cell)
+            predictions, hidden, cell = self.rnn(bg, video_input, tiled[t], hidden, cell)
             ans.append(predictions)
         return ans
     
