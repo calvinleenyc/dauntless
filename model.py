@@ -30,6 +30,40 @@ class ConvLSTM(nn.Module):
     def initCell(self, batch_size):
         return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side).cuda())
 
+def apply_kernels(bg, imgs, kernels):
+    # should rename imgs to img
+    # imgs has size (BATCH_SIZE, 3, 64, 64)
+    # kernels has size (BATCH_SIZE, 10, 5, 5)
+    # output is a list of length BATCH_SIZE with arrays with size (11, 3, 64, 64)
+
+    ans = []
+    imgs = torch.unbind(imgs, dim = 0)
+    kernels = torch.unbind(kernels, dim = 0)
+    bg = torch.unbind(bg, dim = 0)
+    for b in range(BATCH_SIZE):
+        # We pretend that the batch is the 3 input channels.
+        transformed_images = F.conv2d(torch.unsqueeze(imgs[b], dim = 1), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
+        transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
+        # append static background
+        transformed_images = torch.cat((transformed_images, torch.unsqueeze(bg[b], dim = 0)), 0) # 11 x 3 x 64 x 64
+        ans.append(transformed_images)
+    return ans
+
+def expected_pixel(options, masks):
+    # options is the output of apply_kernels
+    # masks has size (BATCH_SIZE, 11, 64, 64)
+    # output has size (BATCH_SIZE, 3, 64, 64)
+    ans = []
+    masks = torch.unbind(masks, dim = 0)
+    for b in range(BATCH_SIZE):
+        here = []
+        for c in range(3):
+            prediction = torch.sum(options[b][:, c, :, :] * masks[b], dim = 0)
+            here.append(prediction)
+        ans.append(torch.stack(here))
+    return torch.stack(ans)
+
+    
 class CDNA(nn.Module):
     def __init__(self):
         super(CDNA, self).__init__()
@@ -54,7 +88,7 @@ class CDNA(nn.Module):
         # so I use this instead: given a 4D tensor, it softmaxes dimension 1.
         self.softmax = nn.Softmax2d()
         
-    def forward(self, img, tiled, hiddens, cells):
+    def forward(self, bg, img, tiled, hiddens, cells):
         # input is preprocessed with numpy (at least for now)
         layer0 = self.conv1(img)
         hidden1, cell1 = self.lstm1(layer0, hiddens[1], cells[1])
@@ -76,9 +110,11 @@ class CDNA(nn.Module):
         hidden7, cell7 = self.lstm7(input7, hiddens[7], cells[7])
 
         input_out = self.last_upsample(torch.cat((hidden7, hidden1), 1))
-        out = self.softmax(self.conv2(input_out)) # channel softmax
+        masks = self.softmax(self.conv2(input_out)) # channel softmax
 
-        return out, normalized_kernels, [None, hidden1, hidden2, hidden3, hidden4, hidden5, hidden6, hidden7],\
+        transformed_images = apply_kernels(bg, img, kernels)
+
+        return expected_pixel(transformed_images, masks), [None, hidden1, hidden2, hidden3, hidden4, hidden5, hidden6, hidden7],\
             [None, cell1, cell2, cell3, cell4, cell5, cell6, cell7]
 
     def initHidden(self, batch_size = 1):

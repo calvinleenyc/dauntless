@@ -41,40 +41,6 @@ class Trainer:
         videos = F.avg_pool3d(videos, (1, 8, 10)).data
         return (videos / 256 - 0.5).cuda()
 
-    @staticmethod
-    def apply_kernels(bg, imgs, kernels):
-        # imgs has size (BATCH_SIZE, 3, 64, 64)
-        # kernels has size (BATCH_SIZE, 10, 5, 5)
-        # output is a list of length BATCH_SIZE with arrays with size (11, 3, 64, 64)
-        
-        ans = []
-        imgs = torch.unbind(imgs, dim = 0)
-        kernels = torch.unbind(kernels, dim = 0)
-        bg = torch.unbind(bg, dim = 0)
-        for b in range(BATCH_SIZE):
-            # We pretend that the batch is the 3 input channels.
-            transformed_images = F.conv2d(torch.unsqueeze(imgs[b], dim = 1), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
-            transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
-            # append static background
-            transformed_images = torch.cat((transformed_images, torch.unsqueeze(bg[b], dim = 0)), 0) # 11 x 3 x 64 x 64
-            ans.append(transformed_images)
-        return ans
-
-    @staticmethod
-    def expected_pixel(options, masks):
-        # options is the output of apply_kernels
-        # masks has size (BATCH_SIZE, 11, 64, 64)
-        # output has size (BATCH_SIZE, 3, 64, 64)
-        ans = []
-        masks = torch.unbind(masks, dim = 0)
-        for b in range(BATCH_SIZE):
-            here = []
-            for c in range(3):
-                prediction = torch.sum(options[b][:, c, :, :] * masks[b], dim = 0)
-                here.append(prediction)
-            ans.append(torch.stack(here))
-        return torch.stack(ans)
-
     def make_predictions(self, bg, videos, stactions, training):
         # NOTE: The variable [videos] has already been unbound in dimension 1, i.e. videos[t] has size BATCH_SIZE x 3 x 64 x 64.
         
@@ -102,11 +68,7 @@ class Trainer:
             # If testing, give it only 2 frames to work with
             # Can also insert scheduled sampling here pretty easily, if desired
             video_input = videos[t] if training or t <= 1 else ans[-1].data
-            masks, kernels, hidden, cell = self.rnn(Variable(video_input), Variable(tiled[t]), hidden, cell)
-
-            transformed_images = Trainer.apply_kernels(Variable(bg), Variable(videos[t]), kernels)
-
-            predictions = Trainer.expected_pixel(transformed_images, masks)
+            predictions, hidden, cell = self.rnn(Variable(bg), Variable(video_input), Variable(tiled[t]), hidden, cell)
             ans.append(predictions)
         return ans
     
