@@ -67,7 +67,7 @@ class Trainer:
         if not test:
 	    np_bg, np_videos, np_states, np_actions = self.sess.run(self.data_getter)
         else:
-	    np_bg, np_videos, np_state, np_actions = self.sess.run(self.test_data)
+	    np_bg, np_videos, np_states, np_actions = self.sess.run(self.test_data)
 	
 	small_videos = self.normalize_and_downsample(np_videos)
         # bg has size (BATCH_SIZE, 1, 512, 640, 3)
