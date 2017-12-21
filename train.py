@@ -44,6 +44,15 @@ class Trainer:
             videos = Variable(torch.FloatTensor(videos))
         videos = F.avg_pool3d(videos, (1, 8, 10))
         return videos / 256 - 0.5
+    
+    def make_batch(self):
+        bg, videos, states, actions = self.sess.run(self.data_getter)
+        small_videos = self.normalize_and_downsample(videos)
+        # bg has size (BATCH_SIZE, 1, 512, 640, 3)
+        small_bg = torch.squeeze(self.normalize_and_downsample(bg))
+        
+        videos = torch.unbind(small_videos, dim = 1)
+        return videos, small_bg, states, actions
 
     def make_predictions(self, bg, videos, stactions, training):
         # NOTE: The variable [videos] has already been unbound in dimension 1, i.e. videos[t] has size BATCH_SIZE x 3 x 64 x 64.
@@ -81,18 +90,8 @@ class Trainer:
     
     def train(self):
         self.epoch += 1
-        bg, videos, states, actions = self.sess.run(self.data_getter)
-        small_videos = self.normalize_and_downsample(videos)
-        
-        # bg has size (BATCH_SIZE, 1, 512, 640, 3)
-        small_bg = torch.squeeze(self.normalize_and_downsample(bg))
-        del videos
-        del bg
-        # Each frame will now be processed separately
-        videos = torch.unbind(small_videos, dim = 1)
-        
+        videos, bg, states, actions = self.make_batch()
         stactions = np.concatenate([states, actions], axis = 2)
-        
         loss = 0
         
         self.optimizer.zero_grad()
@@ -119,13 +118,8 @@ class Trainer:
         return loss
 
     def test(self):
-        bg, videos, states, actions = self.sess.run(self.test_data)
+        videos, bg, states, actions = self.make_batch()
         assert(np.shape(states)[1] == 20) # TEST_LEN
-
-        small_videos = self.normalize_and_downsample(videos)
-        small_bg = torch.squeeze(self.normalize_and_downsample(bg)) # "abuse of notation"
-        del videos
-        del bg
         
         # p.5: We only get the agent's internal state at the beginning.
         # For the rest, we must predict it.
@@ -135,9 +129,6 @@ class Trainer:
             next_state = self.state_predictor(Variable(torch.FloatTensor(prev_staction))).data.numpy()
             predicted_states.append(next_state)
         states = np.stack(predicted_states, axis = 1)
-    
-        # Each frame will now be processed separately
-        videos = torch.unbind(small_videos, dim = 1)
         
         stactions = np.concatenate([states, actions], axis = 2)
         
