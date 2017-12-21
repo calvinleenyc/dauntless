@@ -46,19 +46,19 @@ class Trainer:
     
     def make_batch(self, test = False):
         #if not test:
-	#    bg, videos, np_states, np_actions = self.sess.run(self.data_getter)
+	#    np_bg, np_videos, np_states, np_actions = self.sess.run(self.data_getter)
         # else:
-	#    bg, videos, np_state, np_actions = self.sess.run(self.test_data)
+	#    np_bg, np_videos, np_state, np_actions = self.sess.run(self.test_data)
 	
 	le = 9 if not test else 20
-	bg = np.random.randn(20, 1, 64 * 8, 64 * 10, 3)
-	videos = np.random.randn(20, le, 64 * 8, 64 * 10, 3)
+	np_bg = np.random.randn(20, 1, 64 * 8, 64 * 10, 3)
+	np_videos = np.random.randn(20, le, 64 * 8, 64 * 10, 3)
 	np_states = np.random.randn(20, le, 5)
 	np_actions = np.random.randn(20, le, 5)
 	
-	small_videos = self.normalize_and_downsample(videos)
+	small_videos = self.normalize_and_downsample(np_videos)
         # bg has size (BATCH_SIZE, 1, 512, 640, 3)
-        small_bg = torch.squeeze(self.normalize_and_downsample(bg))
+        small_bg = torch.squeeze(self.normalize_and_downsample(np_bg))
 	if self.use_cuda:
 	    states = Variable(torch.cuda.FloatTensor(np_states))
 	    actions = Variable(torch.cuda.FloatTensor(np_actions))
@@ -75,9 +75,9 @@ class Trainer:
         if test:
 	    predicted_states = [states[0]]
             for i in range(1, np.shape(np_states)[1]):
-		next_state = self.state_predictor(torch.cat((states[i], actions[i]), 1))
+		next_state = self.state_predictor(torch.cat((predicted_states[i-1], actions[i-1]), 1))
                 predicted_states.append(next_state)
-            states = torch.stack(predicted_states, 1)
+            states = predicted_states
 
         return videos, small_bg, states, actions, \
 		self.spatial_tiling(np.concatenate([np_states, np_actions], axis = 2))
@@ -104,6 +104,7 @@ class Trainer:
         return tiled
     
     def train(self):
+	print("train")
         self.epoch += 1
         videos, bg, states, actions, tiled = self.make_batch(test = False)
         loss = 0.0
@@ -131,6 +132,7 @@ class Trainer:
         return loss
 
     def test(self):
+	print("test")
 	videos, bg, states, actions, tiled = self.make_batch(test = True)
         assert(np.shape(states)[1] == 20) # TEST_LEN
         
