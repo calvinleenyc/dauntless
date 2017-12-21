@@ -26,7 +26,6 @@ class Trainer:
         sess.run(tf.global_variables_initializer())
         self.sess = sess
 
-        self.loss_fn = nn.MSELoss()
         self.optimizer = torch.optim.Adam(rnn.parameters(), lr = lr_rate)
         self.state_predict_optimizer = torch.optim.Adam(state_predictor.parameters(), lr = lr_rate)
         self.writer = SummaryWriter()
@@ -92,11 +91,11 @@ class Trainer:
         
         for t in range(TRAIN_LEN - 1):
             prediction, hidden, cell = self.rnn(bg, videos[t], tiled[t], hidden, cell)
-            loss += self.loss_fn(prediction, Variable(videos[t + 1]))
+            loss += F.mse_loss(prediction, Variable(videos[t + 1]))
             
             predicted_state = self.state_predictor(Variable(torch.FloatTensor(stactions[:, t, :])))
 
-            state_prediction_loss += self.loss_fn(predicted_state, Variable(torch.FloatTensor(states[:, t + 1, :])))
+            state_prediction_loss += F.mse_loss(predicted_state, Variable(torch.FloatTensor(states[:, t + 1, :])))
 
         loss.backward()
         state_prediction_loss.backward()
