@@ -40,19 +40,18 @@ class ConvLSTM(nn.Module):
         else:
             return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side))
 
-def apply_kernels(bg, imgs, kernels):
-    # should rename imgs to img
-    # imgs has size (BATCH_SIZE, 3, 64, 64)
+def apply_kernels(bg, img, kernels):
+    # img has size (BATCH_SIZE, 3, 64, 64)
     # kernels has size (BATCH_SIZE, 10, 5, 5)
     # output is a list of length BATCH_SIZE with arrays with size (11, 3, 64, 64)
 
     ans = []
-    imgs = torch.unbind(imgs, dim = 0)
+    img = torch.unbind(img, dim = 0)
     kernels = torch.unbind(kernels, dim = 0)
     bg = torch.unbind(bg, dim = 0)
     for b in range(BATCH_SIZE):
         # We pretend that the batch is the 3 input channels.
-        transformed_images = F.conv2d(torch.unsqueeze(imgs[b], dim = 1), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
+        transformed_images = F.conv2d(torch.unsqueeze(img[b], dim = 1), torch.unsqueeze(kernels[b], dim = 1), padding = 2) # 3 x 10 x 64 x 64
         transformed_images = torch.transpose(transformed_images, 0, 1) # 10 x 3 x 64 x 64
         # append static background
         transformed_images = torch.cat((transformed_images, torch.unsqueeze(bg[b], dim = 0)), 0) # 11 x 3 x 64 x 64
