@@ -13,9 +13,10 @@ import tensorflow as tf
 lr_rate = 0.001
 
 class Trainer:
-    def __init__(self, rnn, state_predictor):
+    def __init__(self, rnn, state_predictor, use_cuda):
         self.rnn = rnn
         self.state_predictor = state_predictor
+        self.use_cuda = use_cuda
         print("Preparing to get data from tfrecord.")
         self.data_getter = build_image_input()
         self.test_data = build_image_input(train = False, novel = False)
@@ -37,7 +38,10 @@ class Trainer:
         # Need to rearrange [videos], so that channel comes before height, width
         videos = np.transpose(videos, axes = (0, 1, 4, 2, 3))
 
-        videos = Variable(torch.FloatTensor(videos).cuda())
+        if self.use_cuda:
+            videos = Variable(torch.cuda.FloatTensor(videos))
+        else:
+            videos = Variable(torch.FloatTensor(videos))
         videos = F.avg_pool3d(videos, (1, 8, 10))
         return videos / 256 - 0.5
 
@@ -56,7 +60,10 @@ class Trainer:
             tiled.append(this_batch)
         tiled = np.array(tiled) # maybe np.stack
 
-        tiled = Variable(torch.FloatTensor(tiled).cuda())
+        if self.use_cuda:
+            tiled = Variable(torch.cuda.FloatTensor(tiled))
+        else:
+            tiled = Variable(torch.FloatTensor(tiled))
         # Each frame will now be processed separately
         tiled = torch.unbind(tiled, dim = 1)
         
@@ -147,10 +154,17 @@ class Trainer:
         return
     
 if __name__ == '__main__' and not run_tests:
-    rnn = CDNA().cuda()
-    # On page 11: "The next state is predicted linearly from the current state and action."
-    state_predictor = nn.Linear(10, 5)
-    trainer = Trainer(rnn, state_predictor)
+    use_cuda = True
+    if use_cuda:
+        rnn = CDNA(use_cuda = True).cuda()
+
+        # On page 11: "The next state is predicted linearly from the current state and action."
+        state_predictor = nn.Linear(10, 5).cuda()
+    else:
+        rnn = CDNA(use_cuda = False)
+        state_predictor = nn.Linear(10, 5)
+        
+    trainer = Trainer(rnn, state_predictor, use_cuda)
 
     
     while True:

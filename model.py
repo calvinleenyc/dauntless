@@ -5,10 +5,11 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 class ConvLSTM(nn.Module):
-    def __init__(self, sq_side, input_ch, hidden_ch):
+    def __init__(self, sq_side, input_ch, hidden_ch, use_cuda):
         super(ConvLSTM, self).__init__()
         self.hidden_ch = hidden_ch
         self.sq_side = sq_side
+        self.use_cuda = use_cuda
 
         self.i2F = nn.Conv2d(input_ch + hidden_ch, hidden_ch, kernel_size = 5, padding = 2)
         self.i2I = nn.Conv2d(input_ch + hidden_ch, hidden_ch, kernel_size = 5, padding = 2)
@@ -25,10 +26,16 @@ class ConvLSTM(nn.Module):
         return H, C
 
     def initHidden(self, batch_size):
-        return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side).cuda())
+        if self.use_cuda:
+            return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side).cuda())
+        else:
+            return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side))
 
     def initCell(self, batch_size):
-        return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side).cuda())
+        if self.use_cuda:
+            return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side).cuda())
+        else:
+            return Variable(torch.zeros(batch_size, self.hidden_ch, self.sq_side, self.sq_side))
 
 def apply_kernels(bg, imgs, kernels):
     # should rename imgs to img
@@ -65,21 +72,22 @@ def expected_pixel(options, masks):
 
     
 class CDNA(nn.Module):
-    def __init__(self):
+    def __init__(self, use_cuda):
         super(CDNA, self).__init__()
+        self.use_cuda = use_cuda
         self.conv1 = nn.Conv2d(3, 32, kernel_size = 5, stride = 2, padding = 2)
-        self.lstm1 = ConvLSTM(32, 32, 32)
-        self.lstm2 = ConvLSTM(32, 32, 32)
+        self.lstm1 = ConvLSTM(32, 32, 32, use_cuda = use_cuda)
+        self.lstm2 = ConvLSTM(32, 32, 32, use_cuda = use_cuda)
         self.downsample23 = nn.Conv2d(32, 64, 2, stride = 2)
-        self.lstm3 = ConvLSTM(16, 64, 64)
-        self.lstm4 = ConvLSTM(16, 64, 64)
+        self.lstm3 = ConvLSTM(16, 64, 64, use_cuda = use_cuda)
+        self.lstm4 = ConvLSTM(16, 64, 64, use_cuda = use_cuda)
         self.downsample45 = nn.Conv2d(64, 128, 2, stride = 2)
-        self.lstm5 = ConvLSTM(8, 138, 138)
+        self.lstm5 = ConvLSTM(8, 138, 138, use_cuda = use_cuda)
         self.to_kernels = nn.Linear(138 * 8 * 8, 10 * 5 * 5)
         self.upsample56 = nn.ConvTranspose2d(138, 64, 2, stride = 2)
-        self.lstm6 = ConvLSTM(16, 64, 64)
+        self.lstm6 = ConvLSTM(16, 64, 64, use_cuda = use_cuda)
         self.upsample67 = nn.ConvTranspose2d(64 + 64, 32, 2, stride = 2)
-        self.lstm7 = ConvLSTM(32, 32, 32)
+        self.lstm7 = ConvLSTM(32, 32, 32, use_cuda = use_cuda)
         # the end of the diagram is ambiguous
         self.last_upsample = nn.ConvTranspose2d(32 + 32, 32, 2, stride = 2) 
         self.conv2 = nn.Conv2d(32, 11, kernel_size = 1)
