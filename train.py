@@ -74,24 +74,6 @@ class Trainer:
         # Each frame will now be processed separately
         tiled = torch.unbind(tiled, dim = 1)
         return tiled
-
-    def make_predictions(self, bg, videos, stactions, training):
-        # NOTE: The variable [videos] has already been unbound in dimension 1, i.e. videos[t] has size BATCH_SIZE x 3 x 64 x 64.
-        
-        tiled = spatial_tiling(stactions)
-        
-        
-        hidden = self.rnn.initHidden(BATCH_SIZE)
-        cell = self.rnn.initCell(BATCH_SIZE)
-
-        ans = []
-        for t in range(TRAIN_LEN - 1 if training else 18): # TODO: Should be a 20
-            # If testing, give it only 2 frames to work with
-            # Can also insert scheduled sampling here pretty easily, if desired
-            video_input = videos[t] if training or t <= 1 else ans[-1].data
-            predictions, hidden, cell = self.rnn(bg, video_input, tiled[t], hidden, cell)
-            ans.append(predictions)
-        return ans
     
     def train(self):
         self.epoch += 1
@@ -104,10 +86,13 @@ class Trainer:
 
         state_prediction_loss = 0
         
-        predictions = self.make_predictions(small_bg, videos, stactions, training = True)
+        tiled = spatial_tiling(stactions)
+        hidden = self.rnn.initHidden(BATCH_SIZE)
+        cell = self.rnn.initCell(BATCH_SIZE)
         
         for t in range(TRAIN_LEN - 1):
-            loss += self.loss_fn(predictions[t], Variable(videos[t + 1]))
+            prediction, hidden, cell = self.rnn(bg, videos[t], tiled[t], hidden, cell)
+            loss += self.loss_fn(prediction, Variable(videos[t + 1]))
             
             predicted_state = self.state_predictor(Variable(torch.FloatTensor(stactions[:, t, :])))
 
@@ -137,7 +122,19 @@ class Trainer:
         
         stactions = np.concatenate([states, actions], axis = 2)
         
-        predictions = self.make_predictions(small_bg, videos, stactions, training = False)
+        tiled = spatial_tiling(stactions)
+        hidden = self.rnn.initHidden(BATCH_SIZE)
+        cell = self.rnn.initCell(BATCH_SIZE)
+        
+        predictions = []
+        
+        for t in range(18):
+            if t <= 1:
+                video_input = videos[t] # allow it to see first two frames
+            else:
+                video_input = ans[-1].data
+            prediction, hidden, cell = self.rnn(bg, video_input, tiled[t], hidden, cell)
+            predictions.append(prediction)
         
         # re-group by original batch
         predictions = torch.stack(predictions, dim = 1)
