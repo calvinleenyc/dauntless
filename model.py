@@ -4,18 +4,16 @@ import numpy as np
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-KERNEL_SIZE = 5
-
 class ConvLSTM(nn.Module):
     def __init__(self, sq_side, input_ch, hidden_ch):
         super(ConvLSTM, self).__init__()
         self.hidden_ch = hidden_ch
         self.sq_side = sq_side
 
-        self.i2F = nn.Conv2d(input_ch + hidden_ch, hidden_ch, KERNEL_SIZE, padding = 2)
-        self.i2I = nn.Conv2d(input_ch + hidden_ch, hidden_ch, KERNEL_SIZE, padding = 2)
-        self.i2O = nn.Conv2d(input_ch + hidden_ch, hidden_ch, KERNEL_SIZE, padding = 2)
-        self.i2C = nn.Conv2d(input_ch + hidden_ch, hidden_ch, KERNEL_SIZE, padding = 2)
+        self.i2F = nn.Conv2d(input_ch + hidden_ch, hidden_ch, kernel_size = 5, padding = 2)
+        self.i2I = nn.Conv2d(input_ch + hidden_ch, hidden_ch, kernel_size = 5, padding = 2)
+        self.i2O = nn.Conv2d(input_ch + hidden_ch, hidden_ch, kernel_size = 5, padding = 2)
+        self.i2C = nn.Conv2d(input_ch + hidden_ch, hidden_ch, kernel_size = 5, padding = 2)
         
     def forward(self, input, hidden, cell):
         combined = torch.cat((input, hidden), 1)
@@ -35,7 +33,7 @@ class ConvLSTM(nn.Module):
 class CDNA(nn.Module):
     def __init__(self):
         super(CDNA, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, KERNEL_SIZE, stride = 2, padding = 2)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size = 5, stride = 2, padding = 2)
         self.lstm1 = ConvLSTM(32, 32, 32)
         self.lstm2 = ConvLSTM(32, 32, 32)
         self.downsample23 = nn.Conv2d(32, 64, 2, stride = 2)
