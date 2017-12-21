@@ -19,8 +19,8 @@ class Trainer:
         self.state_predictor = state_predictor
         self.use_cuda = use_cuda
         print("Preparing to get data from tfrecord.")
-        self.data_getter = build_image_input()
-        self.test_data = build_image_input(train = False, novel = False)
+        #self.data_getter = build_image_input()
+        #self.test_data = build_image_input(train = False, novel = False)
         sess = tf.InteractiveSession()
         tf.train.start_queue_runners(sess)
         sess.run(tf.global_variables_initializer())
@@ -44,16 +44,45 @@ class Trainer:
         videos = F.avg_pool3d(videos, (1, 8, 10))
         return videos / 256 - 0.5
     
-    def make_batch(self):
-        bg, videos, states, actions = self.sess.run(self.data_getter)
-        small_videos = self.normalize_and_downsample(videos)
+    def make_batch(self, test = False):
+        #if not test:
+	#    bg, videos, np_states, np_actions = self.sess.run(self.data_getter)
+        # else:
+	#    bg, videos, np_state, np_actions = self.sess.run(self.test_data)
+	
+	le = 9 if not test else 20
+	bg = np.random.randn(20, 1, 64 * 8, 64 * 10, 3)
+	videos = np.random.randn(20, le, 64 * 8, 64 * 10, 3)
+	np_states = np.random.randn(20, le, 5)
+	np_actions = np.random.randn(20, le, 5)
+	
+	small_videos = self.normalize_and_downsample(videos)
         # bg has size (BATCH_SIZE, 1, 512, 640, 3)
         small_bg = torch.squeeze(self.normalize_and_downsample(bg))
+	if self.use_cuda:
+	    states = Variable(torch.cuda.FloatTensor(np_states))
+	    actions = Variable(torch.cuda.FloatTensor(np_actions))
+	else:
+	    states = Variable(torch.FloatTensor(np_states))
+	    actions = Variable(torch.FloatTensor(np_actions))
         
         videos = torch.unbind(small_videos, dim = 1)
-        return videos, small_bg, states, actions
+	states = torch.unbind(states, dim = 1)
+	actions = torch.unbind(actions, dim = 1)	
     
-    def spatial_tiling(stactions):
+
+	# if we're testing, we replace states with predicted states
+        if test:
+	    predicted_states = [states[0]]
+            for i in range(1, np.shape(np_states)[1]):
+		next_state = self.state_predictor(torch.cat((states[i], actions[i]), 1))
+                predicted_states.append(next_state)
+            states = torch.stack(predicted_states, 1)
+
+        return videos, small_bg, states, actions, \
+		self.spatial_tiling(np.concatenate([np_states, np_actions], axis = 2))
+
+    def spatial_tiling(self, stactions):
         # Compute spatial tiling of state and action, as described on p.5
         tiled = []
         for b in range(BATCH_SIZE):
@@ -76,26 +105,21 @@ class Trainer:
     
     def train(self):
         self.epoch += 1
-        videos, bg, states, actions = self.make_batch()
-        stactions = np.concatenate([states, actions], axis = 2)
-        loss = 0
+        videos, bg, states, actions, tiled = self.make_batch(test = False)
+        loss = 0.0
         
         self.optimizer.zero_grad()
         self.state_predict_optimizer.zero_grad()
 
-        state_prediction_loss = 0
-        
-        tiled = spatial_tiling(stactions)
-        hidden = self.rnn.initHidden(BATCH_SIZE)
+        state_prediction_loss = 0.0
+
+	hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
-        
         for t in range(TRAIN_LEN - 1):
             prediction, hidden, cell = self.rnn(bg, videos[t], tiled[t], hidden, cell)
-            loss += F.mse_loss(prediction, Variable(videos[t + 1]))
-            
-            predicted_state = self.state_predictor(Variable(torch.FloatTensor(stactions[:, t, :])))
-
-            state_prediction_loss += F.mse_loss(predicted_state, Variable(torch.FloatTensor(states[:, t + 1, :])))
+            loss += F.mse_loss(prediction, videos[t + 1])
+            predicted_state = self.state_predictor(torch.cat((states[t], actions[t]), 1))
+            state_prediction_loss += F.mse_loss(predicted_state, states[t + 1])
 
         loss.backward()
         state_prediction_loss.backward()
@@ -107,21 +131,9 @@ class Trainer:
         return loss
 
     def test(self):
-        videos, bg, states, actions = self.make_batch()
+	videos, bg, states, actions, tiled = self.make_batch(test = True)
         assert(np.shape(states)[1] == 20) # TEST_LEN
         
-        # p.5: We only get the agent's internal state at the beginning.
-        # For the rest, we must predict it.
-        predicted_states = [states[:, 0, :]]
-        for i in range(1, np.shape(states)[1]):
-            prev_staction = np.concatenate((predicted_states[i-1], actions[:, i-1, :]), axis = 1)
-            next_state = self.state_predictor(Variable(torch.FloatTensor(prev_staction))).data.numpy()
-            predicted_states.append(next_state)
-        states = np.stack(predicted_states, axis = 1)
-        
-        stactions = np.concatenate([states, actions], axis = 2)
-        
-        tiled = spatial_tiling(stactions)
         hidden = self.rnn.initHidden(BATCH_SIZE)
         cell = self.rnn.initCell(BATCH_SIZE)
         
@@ -131,7 +143,7 @@ class Trainer:
             if t <= 1:
                 video_input = videos[t] # allow it to see first two frames
             else:
-                video_input = ans[-1].data
+                video_input = predictions[-1]
             prediction, hidden, cell = self.rnn(bg, video_input, tiled[t], hidden, cell)
             predictions.append(prediction)
         
